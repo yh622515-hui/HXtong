@@ -1,0 +1,359 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>恒信通</title>
+  <link rel="stylesheet" href="/styles.css?v=20260605-print2">
+</head>
+<body>
+  <div id="loginView" class="login-page">
+    <section class="login-feature-strip" aria-label="检测业务介绍">
+      <div class="feature-slogan">科学公正 · 准确可靠 · 诚信高效 · 服务工程</div>
+      <div class="feature-cards">
+        <div class="feature-card">
+          <span class="feature-icon road-icon" aria-hidden="true"></span>
+          <strong>公路试验检测</strong>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon bridge-icon" aria-hidden="true"></span>
+          <strong>桥梁试验检测</strong>
+        </div>
+        <div class="feature-card">
+          <span class="feature-icon lab-icon" aria-hidden="true"></span>
+          <strong>试验室质量检测</strong>
+        </div>
+      </div>
+    </section>
+    <div class="login-shell">
+      <section class="login-hero">
+        <div class="logo-mark company-mark">临泉县恒信交通工程试验检测有限公司</div>
+        <h1>恒信通</h1>
+        <p>报告模板局域网管理系统</p>
+        <div class="hero-tags">
+          <span>模板分类</span>
+          <span>上传替换</span>
+          <span>下载记录</span>
+        </div>
+      </section>
+
+      <section class="login-box">
+        <div class="auth-tabs">
+          <button id="showLoginBtn" class="auth-tab active" type="button">登录</button>
+          <button id="showRegisterBtn" class="auth-tab" type="button">注册</button>
+        </div>
+
+        <form id="loginForm" class="auth-form">
+          <label>
+            登录账号
+            <input id="loginUsername" name="username" autocomplete="username" required>
+          </label>
+          <label>
+            登录密码
+            <input id="loginPassword" name="password" type="password" autocomplete="current-password" required>
+          </label>
+          <button class="primary" type="submit">登录</button>
+          <div id="loginMessage" class="message"></div>
+        </form>
+
+        <form id="registerForm" class="auth-form" hidden>
+          <label>
+            登录账号
+            <input id="registerUsername" name="username" autocomplete="username" placeholder="建议直接用姓名" required>
+          </label>
+          <label>
+            姓名
+            <input id="registerDisplayName" name="displayName" autocomplete="name" required>
+          </label>
+          <label>
+            登录密码
+            <input id="registerPassword" name="password" type="password" autocomplete="new-password" required>
+          </label>
+          <button class="primary" type="submit">注册并登录</button>
+          <div class="hint">注册后默认为普通用户，管理员权限需要后台设置。</div>
+          <div id="registerMessage" class="message"></div>
+        </form>
+      </section>
+    </div>
+  </div>
+
+  <div id="appView" class="app" hidden>
+    <header class="topbar">
+      <div>
+        <div class="brand">恒信通</div>
+        <div class="subline">报告模板局域网管理系统</div>
+      </div>
+      <div class="top-actions">
+        <span id="currentUser" class="user-pill"></span>
+        <button id="adminBtn" class="ghost admin-only" type="button">管理后台</button>
+        <button id="operationLogBtn" class="ghost admin-only" type="button">操作日志</button>
+        <button id="exportBtn" class="ghost" type="button">导出清单</button>
+        <button id="logoutBtn" class="ghost" type="button">退出</button>
+      </div>
+    </header>
+
+    <main class="layout">
+      <aside class="sidebar">
+        <div class="sidebar-head">
+          <strong>模板类别</strong>
+          <button id="refreshBtn" class="mini" type="button">刷新</button>
+        </div>
+        <div id="categoryTree" class="tree"></div>
+      </aside>
+
+      <section class="content">
+        <section class="home-hero-banner" aria-label="恒信通宣传图">
+          <div class="home-hero-copy">
+            <span>公路水运试验检测</span>
+            <strong>临泉恒信</strong>
+            <p>公路试验检测、桥梁试验检测、试验室质量检测一体化管理。</p>
+          </div>
+        </section>
+        <div class="content-head">
+          <div>
+            <h2 id="contentTitle">全部报告</h2>
+            <div id="reportCount" class="subline"></div>
+          </div>
+          <div class="toolbar">
+            <label class="select-chip">
+              文件
+              <select id="fileFilter">
+                <option value="all">全部</option>
+                <option value="word">有 Word</option>
+                <option value="pdf">有 PDF</option>
+                <option value="excel">有 Excel</option>
+                <option value="missingPdf">缺 PDF</option>
+              </select>
+            </label>
+            <label class="select-chip">
+              状态
+              <select id="quickFilter">
+                <option value="all">全部模板</option>
+                <option value="recentUpload">最近上传</option>
+                <option value="neverDownloaded">未下载过</option>
+                <option value="downloadedByMe">我下载过</option>
+                <option value="stale">60天未更新</option>
+              </select>
+            </label>
+            <div class="search-box">
+              <input id="searchInput" class="search" placeholder="搜索名称、分类或备注">
+              <button id="searchBtn" class="search-btn" type="button" title="确认搜索">🔎</button>
+              <button id="clearSearchBtn" class="mini" type="button">清空</button>
+            </div>
+          </div>
+        </div>
+
+        <div id="reportList" class="report-list"></div>
+      </section>
+    </main>
+  </div>
+
+  <div id="previewModal" class="modal preview-modal" hidden>
+    <div class="modal-panel preview-panel">
+      <div class="modal-head">
+        <div>
+          <h2 id="previewTitle">报告预览</h2>
+          <div class="subline">优先预览 PDF；Word 和 Excel 可下载查看</div>
+        </div>
+        <button id="closePreviewBtn" class="icon-btn" type="button">×</button>
+      </div>
+      <div id="previewBody" class="preview-body"></div>
+    </div>
+  </div>
+
+  <div id="versionModal" class="modal" hidden>
+    <div class="modal-panel version-panel">
+      <div class="modal-head">
+        <div>
+          <h2 id="versionTitle">历史版本</h2>
+          <div class="subline">替换模板时会保留旧版；恢复旧版不会删除新版。</div>
+        </div>
+        <button id="closeVersionBtn" class="icon-btn" type="button">×</button>
+      </div>
+      <div id="versionBody" class="version-body"></div>
+    </div>
+  </div>
+
+  <div id="formModal" class="modal form-modal" hidden>
+    <div class="modal-panel form-panel">
+      <div class="modal-head no-print">
+        <div>
+          <h2 id="formTitle">委托单/任务单填写样品</h2>
+          <div class="subline">可以选择下拉内容，也可以直接点表格里的浅黄色格子打字</div>
+        </div>
+        <div class="modal-actions">
+          <button id="printFormBtn" class="primary" type="button">打印预览/打印</button>
+          <button id="closeFormBtn" class="icon-btn" type="button">×</button>
+        </div>
+      </div>
+      <div id="formControls" class="form-controls no-print"></div>
+      <div id="formPrintArea" class="form-print-area"></div>
+    </div>
+  </div>
+
+  <div id="adminModal" class="modal" hidden>
+    <div class="modal-panel">
+      <div class="modal-head">
+        <div>
+          <h2>管理后台</h2>
+          <div class="subline">上传、导入、分类、用户、安全维护</div>
+        </div>
+        <button id="closeAdminBtn" class="icon-btn" type="button">×</button>
+      </div>
+
+      <div class="admin-tabs" role="tablist" aria-label="管理后台功能">
+        <button class="admin-tab active" data-admin-tab="upload" type="button">上传模板</button>
+        <button class="admin-tab" data-admin-tab="bulk" type="button">批量导入</button>
+        <button class="admin-tab" data-admin-tab="categories" type="button">分类管理</button>
+        <button class="admin-tab super-only" data-admin-tab="users" type="button">用户管理</button>
+        <button class="admin-tab" data-admin-tab="safety" type="button">安全维护</button>
+        <button class="admin-tab" data-admin-tab="inactive" type="button">停用模板</button>
+      </div>
+
+      <div class="admin-pages">
+        <section class="admin-section admin-page active" data-admin-page="upload">
+          <h3>上传或替换报告</h3>
+          <div class="section-help">新增模板或替换旧模板。替换不会删除历史版本，可以在“版本”里恢复。</div>
+          <form id="reportForm" class="stack">
+            <label>
+              操作方式
+              <select name="reportId" id="reportSelect">
+                <option value="">新增报告</option>
+              </select>
+            </label>
+            <label>
+              报告名称
+              <input name="name" id="reportNameInput" required>
+            </label>
+            <label>
+              模板类型
+              <select name="templateType" id="reportTemplateTypeSelect" required>
+                <option value="entrust">委托单/任务单模板</option>
+                <option value="report">检测报告模板</option>
+                <option value="auxiliary">辅助检测</option>
+                <option value="system">管理体系</option>
+              </select>
+            </label>
+            <label>
+              所属分类
+              <select name="categoryId" id="reportCategorySelect" required></select>
+            </label>
+            <label>
+              Word 文件
+              <input name="wordFile" type="file" accept=".doc,.docx">
+            </label>
+            <label>
+              PDF 文件
+              <input name="pdfFile" type="file" accept=".pdf">
+            </label>
+            <label>
+              Excel 文件
+              <input name="excelFile" type="file" accept=".xls,.xlsx">
+            </label>
+            <label>
+              备注
+              <textarea name="remarks" id="reportRemarksInput" rows="3"></textarea>
+            </label>
+            <button class="primary" type="submit">保存报告</button>
+          </form>
+        </section>
+
+        <section class="admin-section admin-page" data-admin-page="bulk" hidden>
+          <h3>批量导入模板</h3>
+          <div class="section-help">适合一次性导入很多文件。同名 Word、PDF、Excel 会合成同一份模板。</div>
+          <form id="bulkForm" class="stack">
+            <label>
+              模板类型
+              <select name="templateType" id="bulkTemplateTypeSelect" required>
+                <option value="entrust">委托单/任务单模板</option>
+                <option value="report">检测报告模板</option>
+                <option value="auxiliary">辅助检测</option>
+                <option value="system">管理体系</option>
+              </select>
+            </label>
+            <label>
+              所属分类
+              <select name="categoryId" id="bulkCategorySelect" required></select>
+            </label>
+            <label>
+              批量选择文件
+              <input name="bulkFiles" id="bulkFilesInput" type="file" accept=".doc,.docx,.pdf,.xls,.xlsx" multiple required>
+            </label>
+            <label>
+              统一备注
+              <textarea name="remarks" id="bulkRemarksInput" rows="3" placeholder="可不填"></textarea>
+            </label>
+            <div class="hint">同名的 Word、PDF、Excel 会自动合成同一份模板；不同名文件会分别新增。</div>
+            <button class="primary" type="submit">开始批量导入</button>
+          </form>
+        </section>
+
+        <section class="admin-section admin-page" data-admin-page="categories" hidden>
+          <h3>分类管理</h3>
+          <div class="section-help">分类按模板类型分开管理，增加检测报告分类不会跑到委托单里。</div>
+          <form id="categoryForm" class="inline-form">
+            <input name="name" placeholder="新分类名称" required>
+            <select name="templateType" id="categoryTemplateTypeSelect">
+              <option value="entrust">委托单/任务单模板</option>
+              <option value="report">检测报告模板</option>
+              <option value="auxiliary">辅助检测</option>
+              <option value="system">管理体系</option>
+            </select>
+            <select name="parentId" id="categoryParentSelect"></select>
+            <button class="primary" type="submit">新增</button>
+          </form>
+          <div id="categoryList" class="manage-list"></div>
+        </section>
+
+        <section class="admin-section admin-page super-only" data-admin-page="users" hidden>
+          <h3>用户管理</h3>
+          <div class="section-help">超级管理员可以改账号、姓名、密码、权限和可见范围。</div>
+          <form id="userForm" class="inline-form">
+            <input name="username" placeholder="登录账号" required>
+            <input name="displayName" placeholder="姓名">
+            <input name="password" placeholder="初始密码" required>
+            <select name="role">
+              <option value="user">普通用户</option>
+              <option value="admin">管理员</option>
+              <option value="superadmin">超级管理员</option>
+            </select>
+            <select name="scope">
+              <option value="all">可看全部</option>
+              <option value="entrust">只看委托单/任务单</option>
+              <option value="report">只看检测报告</option>
+              <option value="system">只看管理体系</option>
+            </select>
+            <button class="primary" type="submit">新增用户</button>
+          </form>
+          <div id="userList" class="manage-list"></div>
+        </section>
+
+        <section class="admin-section admin-page" data-admin-page="safety" hidden>
+          <h3>安全维护</h3>
+          <div class="maintenance-row">
+            <div>
+              <strong>完整备份</strong>
+              <div class="subline">备份数据库和 uploads 文件夹，建议每天或每次大改前点一次。</div>
+            </div>
+            <button id="backupBtn" class="primary" type="button">立即备份</button>
+          </div>
+          <div class="backup-head">
+            <strong>可恢复备份</strong>
+            <span class="subline">恢复前系统会先自动备份当前状态，然后重启网站。</span>
+          </div>
+          <div id="backupList" class="manage-list"></div>
+        </section>
+
+        <section class="admin-section admin-page" data-admin-page="inactive" hidden>
+          <h3>已停用模板</h3>
+          <div class="subline">停用只是从普通列表隐藏，文件还在；需要时可以恢复。</div>
+          <div id="inactiveReportList" class="manage-list"></div>
+        </section>
+      </div>
+    </div>
+  </div>
+
+  <div id="toast" class="toast" hidden></div>
+  <script src="/app.js?v=20260605-print2"></script>
+</body>
+</html>
