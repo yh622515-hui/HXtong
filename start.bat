@@ -1,12 +1,39 @@
 @echo off
-chcp 65001 >nul
+setlocal
 cd /d "%~dp0"
-echo 正在启动恒信通...
+
+set "NODE_EXE="
+where node >nul 2>nul
+if not errorlevel 1 (
+  set "NODE_EXE=node"
+)
+
+if not defined NODE_EXE (
+  set "NODE_EXE=C:\Users\yh622\.cache\codex-runtimes\codex-primary-runtime\dependencies\node\bin\node.exe"
+)
+
+if not defined NODE_EXE (
+  echo Node.js was not found.
+  echo Please install Node.js 24 or newer, then run this file again.
+  echo.
+  pause
+  exit /b 1
+)
+
+if not "%NODE_EXE%"=="node" if not exist "%NODE_EXE%" (
+  echo Node.js was not found.
+  echo Please install Node.js 24 or newer, then run this file again.
+  echo.
+  pause
+  exit /b 1
+)
+
+echo Starting Hengxintong...
 echo.
-echo 本机访问地址：http://localhost:3000
-echo 同事访问地址：http://192.168.60.182:3000
+echo This computer: http://localhost:3000
+echo Other computers: http://192.168.60.182:3000
 echo.
-echo 这个窗口不要关，关掉后系统就停止。
+echo Keep this window open. Closing it will stop the website.
 echo.
-node server.js
+"%NODE_EXE%" server.js
 pause

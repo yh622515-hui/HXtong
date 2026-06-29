@@ -227,7 +227,7 @@ function bindEvents() {
   });
   els.versionBody.addEventListener('click', handleVersionBodyClick);
   els.closeFormBtn.addEventListener('click', closeForm);
-  els.printFormBtn.addEventListener('click', () => window.print());
+  els.printFormBtn.addEventListener('click', printFormsOnly);
   els.formModal.addEventListener('click', (event) => {
     if (event.target === els.formModal) closeForm();
   });
@@ -897,6 +897,87 @@ function renderEntrustPrintArea() {
   els.formPrintArea.innerHTML = renderEntrustSheet(data) + renderTaskSheet(data);
 }
 
+function getCurrentPrintableFormHtml() {
+  const clone = els.formPrintArea.cloneNode(true);
+  const sourceInputs = Array.from(els.formPrintArea.querySelectorAll('input'));
+  clone.querySelectorAll('input').forEach((input, index) => {
+    const source = sourceInputs[index];
+    if (!source) return;
+    if (source.checked) {
+      input.setAttribute('checked', 'checked');
+    } else {
+      input.removeAttribute('checked');
+    }
+    input.setAttribute('value', source.value || '');
+  });
+  return clone.innerHTML;
+}
+
+function printFormsOnly() {
+  if (!els.formPrintArea || !els.formPrintArea.innerHTML.trim()) {
+    window.print();
+    return;
+  }
+
+  const iframe = document.createElement('iframe');
+  iframe.setAttribute('title', 'form-print');
+  iframe.style.position = 'fixed';
+  iframe.style.right = '0';
+  iframe.style.bottom = '0';
+  iframe.style.width = '0';
+  iframe.style.height = '0';
+  iframe.style.border = '0';
+  iframe.style.opacity = '0';
+  iframe.style.pointerEvents = 'none';
+  document.body.appendChild(iframe);
+
+  const printDocument = iframe.contentDocument || iframe.contentWindow.document;
+  printDocument.open();
+  printDocument.write(`<!doctype html>
+<html>
+<head>
+  <meta charset="utf-8">
+  <title>恒信通打印</title>
+  <link id="printStyles" rel="stylesheet" href="/styles.css?v=${Date.now()}">
+</head>
+<body class="print-standalone">
+  <div id="formModal">
+    <div class="form-panel">
+      <div class="form-print-area">
+        ${getCurrentPrintableFormHtml()}
+      </div>
+    </div>
+  </div>
+</body>
+</html>`);
+  printDocument.close();
+
+  const removeFrame = () => {
+    setTimeout(() => iframe.remove(), 500);
+  };
+
+  let didStartPrint = false;
+  const startPrint = () => {
+    if (didStartPrint) return;
+    didStartPrint = true;
+    const printWindow = iframe.contentWindow;
+    printWindow.onafterprint = removeFrame;
+    setTimeout(() => {
+      printWindow.focus();
+      printWindow.print();
+    }, 250);
+  };
+
+  const styleLink = printDocument.getElementById('printStyles');
+  if (styleLink) {
+    styleLink.addEventListener('load', startPrint, { once: true });
+    styleLink.addEventListener('error', startPrint, { once: true });
+    setTimeout(startPrint, 1200);
+  } else {
+    startPrint();
+  }
+}
+
 function renderEntrustSheet(data) {
   return `
     <section class="print-page portrait-page">
@@ -907,7 +988,7 @@ function renderEntrustSheet(data) {
         <span class="paper-number">编号：${editableText(data.entrustNo)}</span>
         <span>第1页 共1页</span>
       </div>
-      <div class="archive-mark">第二联：存档</div>
+      <div class="archive-mark">第一联:存档</div>
       <table class="paper-table entrust-paper">
         <colgroup>
           <col class="c-vertical">
@@ -1027,7 +1108,7 @@ function renderEntrustSheet(data) {
             <td colspan="2">${editableText('')}</td>
           </tr>
           <tr>
-            <th class="vertical" rowspan="6">接样人填写</th>
+            <th class="vertical" rowspan="5">接样人填写</th>
             <th>样品外观检查</th>
             <td colspan="5">对送样人的样品外观描述进行确认：<span class="check checked"></span>认同 <span class="check"></span>不认同 <span class="paper-line"></span></td>
           </tr>
@@ -1051,13 +1132,13 @@ function renderEntrustSheet(data) {
             <th>备 注</th>
             <td colspan="5">${editableText('', true)}</td>
           </tr>
-          <tr>
-            <th></th>
-            <td colspan="5">${editableText('', true)}</td>
-          </tr>
         </tbody>
       </table>
-      <div class="paper-footer">地址：临泉县单桥镇20里洼东侧 <span>邮编：236400</span> <span>电话（传真）：0558-3961988</span></div>
+      <div class="paper-footer">
+        <span>地址：临泉县单桥镇220国道东侧</span>
+        <span>邮编：236400</span>
+        <span>电话(传真）：0558-3961988</span>
+      </div>
     </section>
   `;
 }
@@ -1106,7 +1187,7 @@ function renderTaskSheet(data) {
             <th>报告编号</th>
             <td colspan="3">${editableText(data.reportNo)}</td>
           </tr>
-          <tr>
+          <tr class="task-param-row">
             <th>试验参数</th>
             <td colspan="7">${editableText(data.sample.params, true)}</td>
           </tr>
@@ -1126,11 +1207,11 @@ function renderTaskSheet(data) {
             <th>下达人</th>
             <td>${editableText(data.sender)}</td>
             <th>日期</th>
-            <td>${editableText(data.receiveDate)}</td>
+            <td class="task-date-cell">${editableText(data.receiveDate)}</td>
             <th>接受人</th>
             <td>${editableText(data.receiver)}</td>
             <th>日期</th>
-            <td>${editableText('')}</td>
+            <td class="task-date-cell">${editableText('')}</td>
           </tr>
           <tr>
             <th>样品外观描述</th>
@@ -1141,11 +1222,11 @@ function renderTaskSheet(data) {
             <th>领样人</th>
             <td>${editableText('')}</td>
             <th>日期</th>
-            <td>${editableText('')}</td>
+            <td class="task-date-cell">${editableText('')}</td>
             <th>样品管理员</th>
             <td>${editableText('')}</td>
             <th>日期</th>
-            <td>${editableText('')}</td>
+            <td class="task-date-cell">${editableText('')}</td>
           </tr>
           <tr>
             <th>备注</th>

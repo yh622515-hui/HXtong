@@ -542,22 +542,24 @@ body:not([data-role="superadmin"]) .super-only {
 
 .home-hero-banner {
   min-height: 210px;
-  display: flex;
-  align-items: flex-end;
+  display: grid;
+  align-items: center;
+  justify-items: center;
   margin-bottom: 16px;
   overflow: hidden;
   border: 1px solid rgba(188, 218, 207, 0.9);
   border-radius: 8px;
   background:
-    linear-gradient(90deg, rgba(5, 41, 55, 0.78), rgba(7, 82, 68, 0.38), rgba(255, 255, 255, 0.1)),
+    linear-gradient(90deg, rgba(255, 255, 255, 0.16), rgba(7, 82, 68, 0.16), rgba(255, 255, 255, 0.08)),
     url("/images/home-hero-final.png") center / cover no-repeat;
+  background-blend-mode: screen, normal;
   box-shadow: 0 18px 44px rgba(18, 45, 70, 0.12);
 }
 
 .home-hero-copy {
-  width: min(520px, calc(100% - 32px));
-  margin: 16px;
-  padding: 18px;
+  width: min(430px, calc(100% - 56px));
+  margin: 0 0 0 36px;
+  padding: 14px 18px;
   color: #fff;
   border: 1px solid rgba(255, 255, 255, 0.24);
   border-radius: 8px;
@@ -573,12 +575,12 @@ body:not([data-role="superadmin"]) .super-only {
 
 .home-hero-copy strong {
   display: block;
-  font-size: 34px;
+  font-size: 30px;
   line-height: 1.1;
 }
 
 .home-hero-copy p {
-  margin: 10px 0 0;
+  margin: 8px 0 0;
   color: rgba(255, 255, 255, 0.86);
 }
 
@@ -1889,13 +1891,13 @@ body:not([data-role="superadmin"]) .super-only {
   color: #000;
   border: 1px solid #d7dde5;
   box-shadow: 0 18px 45px rgba(12, 35, 56, 0.14);
-  font-family: SimSun, "Microsoft YaHei", Arial, sans-serif;
+  font-family: SimSun, "宋体", serif;
 }
 
 .portrait-page {
   width: 794px;
   min-height: 1123px;
-  padding: 90px 50px 12px;
+  padding: 112px 34px 12px;
 }
 
 .landscape-page {
@@ -1922,9 +1924,9 @@ body:not([data-role="superadmin"]) .super-only {
 
 .paper-code {
   position: absolute;
-  top: 38px;
+  top: 55px;
   right: 58px;
-  font-size: 10px;
+  font-size: 12.5px;
 }
 
 .paper-meta {
@@ -1933,7 +1935,8 @@ body:not([data-role="superadmin"]) .super-only {
   align-items: center;
   gap: 16px;
   margin: 8px 8px 3px;
-  font-size: 10px;
+  font-size: 11.5px;
+  font-family: SimSun, "宋体", serif;
 }
 
 .paper-number {
@@ -1947,13 +1950,15 @@ body:not([data-role="superadmin"]) .super-only {
   display: inline-block;
   min-width: 96px;
   text-align: left;
+  font-family: inherit;
+  font-size: inherit;
 }
 
 .paper-table {
   width: 100%;
   border-collapse: collapse;
   table-layout: fixed;
-  font-size: 10.5px;
+  font-size: 11.5px;
   line-height: 1.2;
   border: 2px solid #000;
 }
@@ -1983,6 +1988,11 @@ body:not([data-role="superadmin"]) .super-only {
   width: 30px;
 }
 
+.entrust-paper {
+  font-size: 12.5px;
+  line-height: 1.22;
+}
+
 .entrust-paper .c-label {
   width: 82px;
 }
@@ -1991,13 +2001,17 @@ body:not([data-role="superadmin"]) .super-only {
   width: auto;
 }
 
+.entrust-paper tbody tr:nth-child(-n + 10) {
+  height: 28px;
+}
+
 .archive-mark {
   position: absolute;
-  right: 32px;
+  right: 12px;
   top: 520px;
   writing-mode: vertical-rl;
   letter-spacing: 3px;
-  font-size: 13px;
+  font-size: 14px;
   color: #000;
 }
 
@@ -2048,37 +2062,41 @@ body:not([data-role="superadmin"]) .super-only {
 .trial-types {
   display: grid;
   width: 100%;
-  grid-template-columns: repeat(4, minmax(0, 1fr));
-  column-gap: 20px;
-  row-gap: 1px;
-  min-height: 112px;
+  grid-template-columns: repeat(3, minmax(0, 1fr));
+  column-gap: 18px;
+  row-gap: 4px;
+  min-height: 128px;
   align-content: start;
-  line-height: 1.15;
+  line-height: inherit;
   text-align: left;
-  font-size: 9.2px;
+  font-size: inherit;
+  font-family: SimSun, "宋体", serif;
 }
 
 .trial-check {
-  display: flex;
-  align-items: center;
-  justify-content: flex-start;
-  gap: 3px;
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr);
+  align-items: start;
+  column-gap: 4px;
   min-width: 0;
   color: #000;
-  white-space: nowrap;
+  white-space: normal;
 }
 
 .trial-check span {
-  overflow: hidden;
+  grid-column: 2;
+  overflow: visible;
   text-overflow: clip;
   min-width: 0;
 }
 
 .trial-check input {
+  grid-column: 1;
+  grid-row: 1;
   width: 10px;
   height: 10px;
   flex: 0 0 auto;
-  margin: 0 0 0 auto;
+  margin: 1px 0 0;
   accent-color: #000;
 }
 
@@ -2096,23 +2114,24 @@ body:not([data-role="superadmin"]) .super-only {
 
 .paper-footer {
   display: flex;
-  justify-content: space-around;
-  gap: 12px;
+  justify-content: space-between;
+  gap: 18px;
   margin-top: 8px;
-  font-size: 10px;
+  font-size: 12px;
+  white-space: nowrap;
 }
 
 .task-sheet-page h2 {
   margin-top: 36px;
   margin-bottom: 14px;
   letter-spacing: 8px;
-  font-size: 22px;
+  font-size: 23px;
 }
 
 .task-sheet-page .paper-code {
   top: 86px;
   right: 110px;
-  font-size: 12px;
+  font-size: 15px;
 }
 
 .task-meta {
@@ -2120,7 +2139,7 @@ body:not([data-role="superadmin"]) .super-only {
   max-width: 1010px;
   margin: 0 auto 8px;
   justify-content: flex-start;
-  font-size: 14px;
+  font-size: 15px;
 }
 
 .task-meta .paper-number .editable-print {
@@ -2130,7 +2149,7 @@ body:not([data-role="superadmin"]) .super-only {
 .task-paper {
   max-width: 1010px;
   margin: 0 auto;
-  font-size: 14px;
+  font-size: 15px;
   line-height: 1.35;
 }
 
@@ -2138,6 +2157,11 @@ body:not([data-role="superadmin"]) .super-only {
 .task-paper td {
   padding: 10px 10px;
   height: 32px;
+}
+
+.task-paper .task-param-row th,
+.task-paper .task-param-row td {
+  height: 58px;
 }
 
 .task-paper .task-c-label {
@@ -2161,8 +2185,23 @@ body:not([data-role="superadmin"]) .super-only {
   line-height: 1.35;
 }
 
+.task-paper .task-date-cell .editable-print {
+  transform: none;
+}
+
 .task-paper .editable-print.multiline {
   min-height: 30px;
+}
+
+.task-paper .task-param-row .editable-print.multiline {
+  display: flex;
+  min-height: 42px;
+  align-items: center;
+  justify-content: center;
+  line-height: 1.35;
+  text-align: center;
+  white-space: normal;
+  overflow: hidden;
 }
 
 .task-note {
@@ -2485,9 +2524,14 @@ body:not([data-role="superadmin"]) .super-only {
 
   html,
   body {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
     margin: 0 !important;
     padding: 0 !important;
     background: #fff !important;
+    overflow: visible !important;
   }
 
   body > *:not(#formModal) {
@@ -2496,7 +2540,7 @@ body:not([data-role="superadmin"]) .super-only {
 
   #formModal {
     position: static !important;
-    display: block !important;
+    display: contents !important;
     padding: 0 !important;
     background: #fff !important;
     backdrop-filter: none !important;
@@ -2511,6 +2555,7 @@ body:not([data-role="superadmin"]) .super-only {
   }
 
   .form-panel {
+    display: contents !important;
     width: auto !important;
     max-height: none !important;
     overflow: visible !important;
@@ -2522,7 +2567,7 @@ body:not([data-role="superadmin"]) .super-only {
   }
 
   .form-print-area {
-    display: block !important;
+    display: contents !important;
     width: 100% !important;
     height: auto !important;
     min-height: 0 !important;
@@ -2546,8 +2591,8 @@ body:not([data-role="superadmin"]) .super-only {
     break-after: auto !important;
     page-break-before: auto !important;
     break-before: auto !important;
-    page-break-inside: avoid !important;
-    break-inside: avoid !important;
+    page-break-inside: auto !important;
+    break-inside: auto !important;
     overflow: hidden !important;
   }
 
@@ -2557,23 +2602,23 @@ body:not([data-role="superadmin"]) .super-only {
   }
 
   .form-print-area .print-page:last-child {
-    page-break-after: avoid !important;
-    break-after: avoid-page !important;
+    page-break-after: auto !important;
+    break-after: auto !important;
   }
 
   .portrait-page {
     page: portrait;
     width: 210mm !important;
-    height: 295mm !important;
+    height: 296mm !important;
     min-height: 0 !important;
     margin-left: auto !important;
     margin-right: auto !important;
-    padding: 23mm 9.5mm 2mm !important;
+    padding: 24mm 6mm 6mm !important;
   }
 
   .landscape-page {
     width: 297mm !important;
-    height: 207mm !important;
+    height: 209mm !important;
     min-height: 0 !important;
     margin-left: auto !important;
     margin-right: auto !important;
@@ -2585,12 +2630,13 @@ body:not([data-role="superadmin"]) .super-only {
   }
 
   .paper-code {
-    top: 9mm !important;
+    top: 14mm !important;
     right: 9mm !important;
+    font-size: 10pt !important;
   }
 
   .archive-mark {
-    right: 3.5mm !important;
+    right: 1mm !important;
     top: 136mm !important;
   }
 
@@ -2602,7 +2648,7 @@ body:not([data-role="superadmin"]) .super-only {
   }
 
   .paper-table {
-    font-size: 8.6pt !important;
+    font-size: 9.3pt !important;
     line-height: 1.18 !important;
   }
 
@@ -2612,12 +2658,18 @@ body:not([data-role="superadmin"]) .super-only {
   }
 
   .entrust-paper {
-    height: 253mm !important;
+    font-size: 10pt !important;
+    line-height: 1.2 !important;
+    height: 238mm !important;
   }
 
   .entrust-paper th,
   .entrust-paper td {
     height: auto !important;
+  }
+
+  .entrust-paper tbody tr:nth-child(-n + 10) {
+    height: 7.4mm !important;
   }
 
   .entrust-paper .c-vertical {
@@ -2633,46 +2685,65 @@ body:not([data-role="superadmin"]) .super-only {
   }
 
   .trial-types {
-    column-gap: 4.2mm !important;
-    row-gap: 0.2mm !important;
-    min-height: 31mm !important;
-    font-size: 6.45pt !important;
-    line-height: 1.08 !important;
+    grid-template-columns: repeat(3, minmax(0, 1fr)) !important;
+    column-gap: 3.6mm !important;
+    row-gap: 0.9mm !important;
+    min-height: 39mm !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+    font-family: SimSun, "宋体", serif !important;
   }
 
   .trial-check {
-    gap: 1.4mm !important;
+    display: grid !important;
+    grid-template-columns: auto minmax(0, 1fr) !important;
+    align-items: start !important;
+    column-gap: 1mm !important;
+    white-space: normal !important;
+  }
+
+  .trial-check span {
+    grid-column: 2 !important;
+    overflow: visible !important;
   }
 
   .trial-check input {
+    grid-column: 1 !important;
+    grid-row: 1 !important;
     width: 2.8mm !important;
     height: 2.8mm !important;
+    margin: 0.35mm 0 0 !important;
   }
 
   .paper-footer {
-    margin-top: 2.2mm !important;
-    font-size: 8pt !important;
+    position: static !important;
+    margin-top: 2mm !important;
+    font-size: 9.3pt !important;
+    justify-content: space-between !important;
+    gap: 5mm !important;
+    white-space: nowrap !important;
   }
 
   .task-sheet-page h2 {
     margin-top: 5mm !important;
     margin-bottom: 5mm !important;
-    font-size: 21pt !important;
+    font-size: 22pt !important;
   }
 
   .task-sheet-page .paper-code {
     top: 12mm !important;
     right: 18mm !important;
+    font-size: 12.2pt !important;
   }
 
   .task-meta {
     max-width: none !important;
     margin-bottom: 3mm !important;
-    font-size: 11pt !important;
+    font-size: 11.8pt !important;
   }
 
   .task-paper {
-    font-size: 11.4pt !important;
+    font-size: 12.2pt !important;
     height: 168mm !important;
     width: 100% !important;
     margin-left: auto !important;
@@ -2701,13 +2772,168 @@ body:not([data-role="superadmin"]) .super-only {
     padding: 2.3mm 3.2mm !important;
   }
 
+  .task-paper .task-param-row th,
+  .task-paper .task-param-row td {
+    height: 20mm !important;
+  }
+
   .task-paper .editable-print {
     min-height: 5mm !important;
+  }
+
+  .task-paper .task-date-cell .editable-print {
+    transform: none !important;
+  }
+
+  .task-paper .task-param-row .editable-print.multiline {
+    display: flex !important;
+    min-height: 14mm !important;
+    align-items: center !important;
+    justify-content: center !important;
+    line-height: 1.35 !important;
+    text-align: center !important;
+    white-space: normal !important;
+    overflow: hidden !important;
   }
 
   .editable-print {
     background: transparent !important;
     outline: none !important;
     padding: 0;
+  }
+
+  body.print-standalone {
+    display: block !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body.print-standalone #formModal,
+  body.print-standalone .form-panel,
+  body.print-standalone .form-print-area {
+    display: block !important;
+    position: static !important;
+    width: auto !important;
+    height: auto !important;
+    min-height: 0 !important;
+    margin: 0 !important;
+    padding: 0 !important;
+    overflow: visible !important;
+    background: #fff !important;
+  }
+
+  body.print-standalone .print-page {
+    margin: 0 auto !important;
+    box-shadow: none !important;
+    border: 0 !important;
+    overflow: hidden !important;
+    font-family: SimSun, "宋体", serif !important;
+    page-break-before: auto !important;
+    break-before: auto !important;
+    page-break-inside: avoid !important;
+    break-inside: avoid !important;
+  }
+
+  body.print-standalone .form-print-area .print-page:not(:last-child) {
+    page-break-after: always !important;
+    break-after: page !important;
+  }
+
+  body.print-standalone .form-print-area .print-page:last-child {
+    page-break-after: auto !important;
+    break-after: auto !important;
+  }
+
+  body.print-standalone .portrait-page {
+    width: 210mm !important;
+    height: 296mm !important;
+    padding: 25mm 13mm 13mm 16mm !important;
+  }
+
+  body.print-standalone .landscape-page {
+    width: 297mm !important;
+    height: 209mm !important;
+    padding: 13mm 12mm 9mm 16mm !important;
+  }
+
+  body.print-standalone .paper-code {
+    font-size: 8.8pt !important;
+    font-family: SimSun, "宋体", serif !important;
+  }
+
+  body.print-standalone .paper-meta,
+  body.print-standalone .paper-number,
+  body.print-standalone .paper-number .editable-print {
+    font-family: SimSun, "宋体", serif !important;
+    font-size: 8.5pt !important;
+    font-weight: 400 !important;
+  }
+
+  body.print-standalone .archive-mark {
+    right: 6mm !important;
+    top: 132mm !important;
+    font-size: 9pt !important;
+  }
+
+  body.print-standalone .paper-table {
+    font-size: 8.2pt !important;
+    line-height: 1.12 !important;
+    font-family: SimSun, "宋体", serif !important;
+  }
+
+  body.print-standalone .paper-table th,
+  body.print-standalone .paper-table td {
+    padding: 0.85mm 1.25mm !important;
+  }
+
+  body.print-standalone .entrust-paper {
+    font-size: 8.5pt !important;
+    line-height: 1.12 !important;
+    height: 216mm !important;
+  }
+
+  body.print-standalone .trial-types {
+    min-height: 34mm !important;
+    font-size: inherit !important;
+    line-height: inherit !important;
+    column-gap: 3.4mm !important;
+    font-family: SimSun, "宋体", serif !important;
+  }
+
+  body.print-standalone .paper-footer {
+    margin-top: 2mm !important;
+    font-size: 7.8pt !important;
+  }
+
+  body.print-standalone .task-sheet-page h2 {
+    margin-top: 4mm !important;
+    margin-bottom: 4mm !important;
+    font-size: 18pt !important;
+  }
+
+  body.print-standalone .task-meta {
+    font-size: 9.8pt !important;
+    margin-bottom: 2.5mm !important;
+  }
+
+  body.print-standalone .task-paper {
+    font-size: 10pt !important;
+    height: 144mm !important;
+  }
+
+  body.print-standalone .task-paper th,
+  body.print-standalone .task-paper td {
+    height: 10.3mm !important;
+    padding: 1.4mm 2.2mm !important;
+  }
+
+  body.print-standalone .task-paper .task-param-row th,
+  body.print-standalone .task-paper .task-param-row td {
+    height: 16mm !important;
   }
 }
