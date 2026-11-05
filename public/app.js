@@ -2,14 +2,18 @@ const TEMPLATE_TYPES = [
   { id: 'entrust', label: '委托单/任务单模板' },
   { id: 'report', label: '检测报告模板' },
   { id: 'auxiliary', label: '辅助检测' },
-  { id: 'system', label: '管理体系' }
+  { id: 'system', label: '管理体系' },
+  { id: 'video', label: '检测视频' },
+  { id: 'project', label: '阜南南阳大道' },
+  { id: 'instrument', label: '仪器使用记录' },
+  { id: 'tool', label: '常用工具' }
 ];
 
 const ENTRUST_CLIENTS = [
   {
     name: '安徽省新路建设工程集团有限责任公司',
-    project: '临泉县2025年农村公路(联网路)建设项目四标段',
-    code: 'A06'
+    project: '南阳大道（阜南段）修复养护工程许城路项目',
+    code: 'A13'
   },
   {
     name: '安徽典筑建筑工程有限责任公司',
@@ -71,20 +75,44 @@ const ENTRUST_SAMPLES = [
   }
 ];
 
+const ENTRUST_DEFAULT_RECEIVER = '李晓东';
+const ENTRUST_SEQUENCE_STORAGE_KEY = 'hxtEntrustSequences';
+const FUNAN_MANUAL_FORM_STORAGE_KEY = 'hxtFunanManualFieldForms';
+const FUNAN_TEST_ITEM_OPTIONS = [
+  '压实度 (表干法)',
+  '压实度 (灌砂法)',
+  '厚度（取芯法）',
+  '弯沉（落锤法）',
+  '渗水',
+  '摩擦系数（摆式仪法）',
+  '平整度（连续式平整度仪 ）',
+  '抗滑构造深度（铺砂法 ）'
+];
+const FUNAN_SAMPLE_SPEC_OPTIONS = ['AC-13C', 'AC-20C', '4%', '5%', '10%'];
+
 const state = {
   user: null,
   categories: [],
   reports: [],
+  videos: [],
+  videoDir: '',
+  funanProject: null,
+  funanTaskLedgerId: null,
+  instrumentUsage: null,
+  instrumentMatches: [],
   dashboard: null,
   selectedTemplateType: 'entrust',
   selectedCategoryId: null,
-  expandedTemplateTypes: new Set(['entrust']),
+  expandedTemplateTypes: new Set(),
   expanded: new Set(),
   search: '',
   searchDraft: '',
   fileFilter: 'all',
   quickFilter: 'all',
-  formReportId: null
+  formReportId: null,
+  quickEntrustBatch: null,
+  sampleOrigins: {},
+  trialDetails: {}
 };
 
 const els = {};
@@ -152,6 +180,16 @@ function cacheElements() {
     formTitle: document.getElementById('formTitle'),
     formControls: document.getElementById('formControls'),
     formPrintArea: document.getElementById('formPrintArea'),
+    projectTaskModal: document.getElementById('projectTaskModal'),
+    projectTaskTitle: document.getElementById('projectTaskTitle'),
+    projectTaskControls: document.getElementById('projectTaskControls'),
+    projectTaskPrintArea: document.getElementById('projectTaskPrintArea'),
+    confirmProjectTaskBtn: document.getElementById('confirmProjectTaskBtn'),
+    closeProjectTaskBtn: document.getElementById('closeProjectTaskBtn'),
+    videoModal: document.getElementById('videoModal'),
+    closeVideoBtn: document.getElementById('closeVideoBtn'),
+    videoTitle: document.getElementById('videoTitle'),
+    trainingVideoPlayer: document.getElementById('trainingVideoPlayer'),
     adminModal: document.getElementById('adminModal'),
     closeAdminBtn: document.getElementById('closeAdminBtn'),
     adminTabs: Array.from(document.querySelectorAll('[data-admin-tab]')),
@@ -171,6 +209,16 @@ function cacheElements() {
     categoryTemplateTypeSelect: document.getElementById('categoryTemplateTypeSelect'),
     categoryParentSelect: document.getElementById('categoryParentSelect'),
     categoryList: document.getElementById('categoryList'),
+    videoForm: document.getElementById('videoForm'),
+    videoIdInput: document.getElementById('videoIdInput'),
+    videoTitleInput: document.getElementById('videoTitleInput'),
+    videoCategoryInput: document.getElementById('videoCategoryInput'),
+    videoCategorySuggestions: document.getElementById('videoCategorySuggestions'),
+    videoLecturerInput: document.getElementById('videoLecturerInput'),
+    videoFileNameInput: document.getElementById('videoFileNameInput'),
+    videoRemarksInput: document.getElementById('videoRemarksInput'),
+    resetVideoFormBtn: document.getElementById('resetVideoFormBtn'),
+    videoAdminList: document.getElementById('videoAdminList'),
     userForm: document.getElementById('userForm'),
     userList: document.getElementById('userList'),
     inactiveReportList: document.getElementById('inactiveReportList'),
@@ -215,29 +263,32 @@ function bindEvents() {
   els.operationLogBtn.addEventListener('click', showOperationLogs);
   els.exportBtn.addEventListener('click', handleExport);
   els.closePreviewBtn.addEventListener('click', closePreview);
-  els.previewModal.addEventListener('click', (event) => {
-    if (event.target === els.previewModal) closePreview();
-  });
+  bindBackdropClose(els.previewModal, closePreview);
   els.previewBody.addEventListener('input', handleRoundingCalculatorInput);
   els.previewBody.addEventListener('change', handleRoundingCalculatorInput);
   els.previewBody.addEventListener('click', handleRoundingCalculatorClick);
   els.closeVersionBtn.addEventListener('click', closeVersions);
-  els.versionModal.addEventListener('click', (event) => {
-    if (event.target === els.versionModal) closeVersions();
-  });
+  bindBackdropClose(els.versionModal, closeVersions);
   els.versionBody.addEventListener('click', handleVersionBodyClick);
   els.closeFormBtn.addEventListener('click', closeForm);
+  els.closeProjectTaskBtn.addEventListener('click', closeProjectTask);
+  els.confirmProjectTaskBtn.addEventListener('click', confirmAndPrintProjectTask);
+  bindBackdropClose(els.projectTaskModal, closeProjectTask);
+  els.projectTaskControls.addEventListener('input', saveAndRenderProjectTaskDraft);
+  els.projectTaskControls.addEventListener('change', saveAndRenderProjectTaskDraft);
+  els.projectTaskControls.addEventListener('click', handleProjectTaskControlClick);
   els.printFormBtn.addEventListener('click', printFormsOnly);
-  els.formModal.addEventListener('click', (event) => {
-    if (event.target === els.formModal) closeForm();
-  });
+  bindBackdropClose(els.formModal, closeForm);
   els.formControls.addEventListener('input', handleEntrustControlChange);
   els.formControls.addEventListener('change', handleEntrustControlChange);
   els.formControls.addEventListener('click', handleEntrustControlClick);
+  els.formPrintArea.addEventListener('click', handlePrintCheckClick);
+  els.formPrintArea.addEventListener('change', handleTrialTypeChange);
+  els.closeVideoBtn.addEventListener('click', closeVideo);
+  bindBackdropClose(els.videoModal, closeVideo);
+  els.videoModal.addEventListener('click', handleVideoSpeedClick);
   els.closeAdminBtn.addEventListener('click', closeAdmin);
-  els.adminModal.addEventListener('click', (event) => {
-    if (event.target === els.adminModal) closeAdmin();
-  });
+  bindBackdropClose(els.adminModal, closeAdmin);
   els.adminTabs.forEach((button) => {
     button.addEventListener('click', () => setAdminTab(button.dataset.adminTab));
   });
@@ -251,12 +302,36 @@ function bindEvents() {
   els.bulkTemplateTypeSelect.addEventListener('change', () => updateBulkCategoryOptions());
   els.categoryForm.addEventListener('submit', handleCategorySubmit);
   els.categoryTemplateTypeSelect.addEventListener('change', () => updateCategoryParentOptions());
+  els.videoForm.addEventListener('submit', handleVideoSubmit);
+  els.resetVideoFormBtn.addEventListener('click', resetVideoForm);
+  els.videoAdminList.addEventListener('click', handleVideoAdminClick);
   els.userForm.addEventListener('submit', handleUserSubmit);
   els.categoryList.addEventListener('click', handleCategoryListClick);
   els.categoryList.addEventListener('change', handleCategoryListChange);
   els.userList.addEventListener('click', handleUserListClick);
   els.inactiveReportList.addEventListener('click', handleInactiveReportListClick);
   els.reportList.addEventListener('click', handleReportListClick);
+  els.reportList.addEventListener('click', handleInstrumentAction);
+  els.reportList.addEventListener('change', handleAutoPdfFileChange);
+  els.reportList.addEventListener('change', handleSoftwareFileChange);
+  els.reportList.addEventListener('change', handleFunanLedgerFileChange);
+}
+
+function bindBackdropClose(modal, close) {
+  let startedOnBackdrop = false;
+  modal.addEventListener('pointerdown', (event) => {
+    startedOnBackdrop = event.isPrimary && event.button === 0 && event.target === modal;
+  });
+  modal.addEventListener('pointerup', (event) => {
+    if (event.target !== modal) startedOnBackdrop = false;
+  });
+  modal.addEventListener('pointercancel', () => {
+    startedOnBackdrop = false;
+  });
+  modal.addEventListener('click', (event) => {
+    if (startedOnBackdrop && event.target === modal) close();
+    startedOnBackdrop = false;
+  });
 }
 
 async function checkLogin() {
@@ -317,6 +392,7 @@ async function handleLogout() {
   state.user = null;
   state.categories = [];
   state.reports = [];
+  state.videos = [];
   state.dashboard = null;
   showLogin();
 }
@@ -331,16 +407,22 @@ function showLogin() {
 }
 
 function resetBlockingOverlays() {
-  [els.previewModal, els.versionModal, els.formModal, els.adminModal].forEach((modal) => {
+  [els.previewModal, els.versionModal, els.formModal, els.projectTaskModal, els.videoModal, els.adminModal].forEach((modal) => {
     if (!modal) return;
     modal.hidden = true;
     modal.setAttribute('hidden', '');
   });
   state.formReportId = null;
+  state.funanTaskLedgerId = null;
   if (els.previewBody) els.previewBody.innerHTML = '';
   if (els.versionBody) els.versionBody.innerHTML = '';
   if (els.formControls) els.formControls.innerHTML = '';
   if (els.formPrintArea) els.formPrintArea.innerHTML = '';
+  if (els.projectTaskPrintArea) els.projectTaskPrintArea.innerHTML = '';
+  if (els.trainingVideoPlayer) {
+    els.trainingVideoPlayer.pause();
+    els.trainingVideoPlayer.removeAttribute('src');
+  }
   document.body.classList.remove('is-printing', 'modal-open');
 }
 
@@ -375,10 +457,13 @@ function setAuthMode(mode) {
 }
 
 async function loadData() {
-  const [categoryData, reportData, dashboardData] = await Promise.all([
+  const [categoryData, reportData, dashboardData, videoData, funanProject, instrumentUsage] = await Promise.all([
     api('/api/categories'),
     api(`/api/reports?templateType=${encodeURIComponent(state.selectedTemplateType)}${state.selectedCategoryId ? `&categoryId=${state.selectedCategoryId}` : ''}`),
-    api('/api/dashboard')
+    api('/api/dashboard'),
+    api('/api/training-videos'),
+    state.selectedTemplateType === 'project' ? api('/api/funan-project') : Promise.resolve(null),
+    state.selectedTemplateType === 'instrument' ? api('/api/instrument-usage') : Promise.resolve(null)
   ]);
 
   state.categories = categoryData.categories.map((item) => ({
@@ -393,10 +478,15 @@ async function loadData() {
     }
   }));
   state.reports = reportData.reports;
+  state.videos = videoData.videos || [];
+  state.videoDir = videoData.videoDir || '';
+  state.funanProject = funanProject;
+  state.instrumentUsage = instrumentUsage;
   state.dashboard = dashboardData;
   renderCategories();
   renderDashboard();
   renderReports();
+  renderVideoAdminList();
   refreshAdminOptions();
 }
 
@@ -497,6 +587,30 @@ function renderDashboard() {
 }
 
 function renderReports() {
+  if (state.selectedTemplateType === 'tool') {
+    renderCommonTools();
+    return;
+  }
+  if (state.selectedTemplateType === 'instrument') {
+    renderInstrumentUsage();
+    return;
+  }
+  if (state.selectedTemplateType === 'project') {
+    renderFunanProject();
+    return;
+  }
+
+  if (isVideoCategorySelected()) {
+    renderVideos();
+    return;
+  }
+
+  const selectedCategory = state.categories.find((item) => item.id === state.selectedCategoryId);
+  if (selectedCategory?.templateType === 'system' && selectedCategory.name === '标准/一单一库') {
+    renderStandardLibraryTool(selectedCategory);
+    return;
+  }
+
   const keyword = state.search.toLowerCase();
   const filtered = state.reports.filter((report) => {
     const text = `${report.name} ${report.categoryName} ${report.remarks}`.toLowerCase();
@@ -512,14 +626,22 @@ function renderReports() {
     return true;
   });
 
-  const selectedCategory = state.categories.find((item) => item.id === state.selectedCategoryId);
   const selectedType = TEMPLATE_TYPES.find((item) => item.id === state.selectedTemplateType) || TEMPLATE_TYPES[0];
   els.contentTitle.textContent = selectedCategory ? `${selectedType.label} - ${selectedCategory.name}` : selectedType.label;
   const searchText = state.search ? `，关键词：${state.search}` : '';
   els.reportCount.textContent = `共 ${filtered.length} 份模板${searchText}`;
 
   if (filtered.length === 0) {
-    els.reportList.innerHTML = '<div class="empty">暂无报告</div>';
+    els.reportList.innerHTML = `
+      ${isSoftwareDownloadCategory(selectedCategory) && canManageTemplates() ? `
+        <div class="software-upload-empty">
+          <input data-auto-software-file type="file" hidden>
+          <button class="header-upload-btn" data-action="auto-upload-software" title="选择软件后自动上传" type="button">上传软件</button>
+          <span class="muted">点击上传常用软件</span>
+        </div>
+      ` : ''}
+      <div class="empty">暂无报告</div>
+    `;
     return;
   }
 
@@ -527,10 +649,20 @@ function renderReports() {
     <table class="report-table">
       <thead>
         <tr>
-          <th>报告名称</th>
+          <th>${isStandardDownloadCategory(selectedCategory) ? '标准规范名称' : '报告名称'}</th>
           <th>分类</th>
           <th>下载</th>
-          <th>上传信息</th>
+          <th>
+            <span class="upload-header-control">上传信息
+              ${isStandardDownloadCategory(selectedCategory) && canManageTemplates() ? `
+                <input data-auto-pdf-file type="file" accept="application/pdf,.pdf" hidden>
+                <button class="header-upload-btn" data-action="auto-upload-pdf" title="选择 PDF 后自动上传" type="button">上传</button>
+              ` : isSoftwareDownloadCategory(selectedCategory) && canManageTemplates() ? `
+                <input data-auto-software-file type="file" hidden>
+                <button class="header-upload-btn" data-action="auto-upload-software" title="选择软件后自动上传" type="button">上传</button>
+              ` : ''}
+            </span>
+          </th>
           <th>最后下载</th>
           <th>备注</th>
           <th>操作</th>
@@ -543,17 +675,76 @@ function renderReports() {
   `;
 }
 
+const COMMON_TOOL_FILES = {
+  '离线PDF工具箱-7项功能': '离线PDF工具箱-7项功能.html',
+  '离线PDF工具箱-拆分书籍对开页': '离线PDF工具箱-拆分书籍对开页.html',
+  '离线PDF工具箱-交替合并': '离线PDF工具箱-交替合并.html'
+};
+
+const COMMON_TOOL_LINKS = [
+  ...Object.entries(COMMON_TOOL_FILES).map(([name, file]) => ({
+    name,
+    href: `/tools/${encodeURIComponent(file)}`,
+    description: '局域网离线使用，不依赖外网。',
+    external: false
+  })),
+  {
+    name: '检验检测机构资质认定能力项目库',
+    href: 'https://cma.caqit.org.cn/',
+    description: '打开官方平台人工查询标准和能力项目。',
+    external: true
+  }
+];
+
+function renderCommonTools() {
+  const selectedCategory = state.categories.find((item) => item.id === state.selectedCategoryId);
+  const visibleLinks = selectedCategory?.name && COMMON_TOOL_FILES[selectedCategory.name]
+    ? COMMON_TOOL_LINKS.filter((item) => item.name === selectedCategory.name)
+    : COMMON_TOOL_LINKS;
+  els.contentTitle.textContent = selectedCategory ? `常用工具 - ${selectedCategory.name}` : '常用工具';
+  els.reportCount.textContent = `共 ${visibleLinks.length} 个工具入口`;
+  els.reportList.innerHTML = visibleLinks.length ? `
+    <div class="tool-grid">
+      ${visibleLinks.map((tool) => {
+        const target = tool.external ? ' target="_blank" rel="noopener"' : ' target="_blank" rel="noopener"';
+        return `<article class="tool-card">
+          <div class="tool-card-icon">PDF</div>
+          <h3>${escapeHtml(tool.name)}</h3>
+          <p>${escapeHtml(tool.description)}</p>
+          <a class="primary tool-open-btn" href="${tool.href}"${target}>${tool.external ? '打开官方平台' : '打开工具'}</a>
+        </article>`;
+      }).join('')}
+    </div>
+  ` : '<div class="empty">暂无在线工具</div>';
+}
+
+function renderStandardLibraryTool(category) {
+  els.contentTitle.textContent = `管理体系 - ${category.name}`;
+  els.reportCount.textContent = '按标准规范下载库自动查新';
+  els.reportList.innerHTML = `
+    <section class="standard-tool-entry">
+      <div>
+        <h3>一单一库标准查新</h3>
+        <p>上传查新表后，系统读取 C 列标准名称和编号，在标准规范下载库中比对，并导出带 √ / × 结果的新表。</p>
+      </div>
+      <a class="primary standard-tool-open" href="/standard-library-check.html">打开查新工具</a>
+    </section>
+  `;
+}
+
 function renderReportRow(report) {
   const isCalculator = isOnlineTool(report);
+  const softwareButton = report.hasSoftware ? `<a class="file-btn" href="/download/${report.id}/software">下载</a>` : '';
   const fileButtons = [
     report.hasWord ? `<a class="file-btn" href="/download/${report.id}/word">Word</a>` : '',
     report.hasPdf ? `<a class="file-btn" href="/download/${report.id}/pdf">PDF</a>` : '',
-    report.hasExcel ? `<a class="file-btn excel" href="/download/${report.id}/excel">Excel</a>` : ''
+    report.hasExcel ? `<a class="file-btn excel" href="/download/${report.id}/excel">Excel</a>` : '',
+    softwareButton
   ].filter(Boolean).join('');
 
   return `
     <tr>
-      <td data-label="报告名称">
+      <td data-label="${report.categoryName === '标准规范下载' ? '标准规范名称' : '报告名称'}">
         <div class="report-name">${escapeHtml(report.name)}</div>
         <div class="muted">编号：${report.id}</div>
       </td>
@@ -589,14 +780,569 @@ function renderReportRow(report) {
   `;
 }
 
+function isStandardDownloadCategory(category) {
+  return category?.templateType === 'system' && category.name === '标准规范下载';
+}
+
+function renderFunanProject() {
+  els.contentTitle.textContent = '阜南南阳大道 - 现场单据';
+  els.reportCount.textContent = '手工填写后自动保留上次内容';
+  els.reportList.innerHTML = `
+    <section class="field-form-entry">
+      <div>
+        <h3>现场检测任务单和现场取样单</h3>
+        <p>填写一次后，下次会自动带出上一次内容；两张单据的关联信息会同步填写。</p>
+      </div>
+      <button class="primary" data-action="open-funan-manual-forms" type="button">填写现场单据</button>
+    </section>
+  `;
+}
+
+function renderInstrumentUsage() {
+  const records = state.instrumentUsage?.records || [];
+  els.contentTitle.textContent = '仪器使用记录';
+  els.reportCount.textContent = `最近 ${records.length} 条使用记录`;
+  els.reportList.innerHTML = `
+    <section class="instrument-tool">
+      <div class="instrument-tool-head"><strong>根据试验参数确定仪器</strong><span class="muted">可粘贴试验参数，系统先匹配仪器编号，再确认使用记录。</span></div>
+      <div class="instrument-input-grid">
+        <label>使用日期<input id="instrumentDate" type="date" value="${new Date().toISOString().slice(0, 10)}"></label>
+        <label>样品编号<input id="instrumentSampleNo" placeholder="例如：YP-2026-WJL-0001-A13"></label>
+        <label class="instrument-wide">试验参数<textarea id="instrumentParameters" rows="3" placeholder="例如：颗粒级配、含泥量及泥块含量、压实度"></textarea></label>
+        <label>开始时间<input id="instrumentStartTime" placeholder="例如：08:30"></label>
+        <label>结束时间<input id="instrumentEndTime" placeholder="例如：10:30"></label>
+        <label>使用人<input id="instrumentUserName" placeholder="检测人员姓名"></label>
+      </div>
+      <div class="instrument-actions"><button class="primary" data-action="match-instruments" type="button">匹配仪器</button><button class="mini" data-action="save-instruments" type="button">保存使用记录</button></div>
+      <div id="instrumentMatches" class="instrument-matches"><div class="empty compact">输入试验参数后点击“匹配仪器”。</div></div>
+    </section>
+    <section class="instrument-history"><h3>使用记录</h3>${records.length ? `<table class="report-table"><thead><tr><th>日期</th><th>样品编号</th><th>仪器</th><th>使用时间</th><th>使用人</th><th>状态</th></tr></thead><tbody>${records.map((r) => `<tr><td>${escapeHtml(r.usageDate)}</td><td>${escapeHtml(r.sampleNo)}</td><td>${escapeHtml(r.instrumentName)}<div class="muted">${escapeHtml(r.instrumentCode)}</div></td><td>${escapeHtml(r.startTime)}-${escapeHtml(r.endTime)}</td><td>${escapeHtml(r.userName)}</td><td>${escapeHtml(r.beforeStatus)} / ${escapeHtml(r.afterStatus)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">暂无使用记录</div>'}</section>
+  `;
+}
+
+async function handleInstrumentAction(event) {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const parameters = document.getElementById('instrumentParameters')?.value || '';
+  if (button.dataset.action === 'match-instruments') {
+    if (!parameters.trim()) { showError(new Error('请先填写试验参数')); return; }
+    try {
+      const data = await api('/api/instrument-usage/match', { method: 'POST', body: { parameters } });
+      state.instrumentMatches = data.instruments || [];
+      const box = document.getElementById('instrumentMatches');
+      box.innerHTML = state.instrumentMatches.length ? state.instrumentMatches.map((item, index) => `<label class="instrument-match"><input type="checkbox" data-instrument-index="${index}" checked><span><strong>${escapeHtml(item.name)}</strong><b>${escapeHtml(item.code)}</b><small>${escapeHtml(item.match || '按名称匹配')}</small></span></label>`).join('') : '<div class="empty compact">没有匹配到仪器，请检查参数文字或手工调整参数。</div>';
+    } catch (error) { showError(error); }
+  }
+  if (button.dataset.action === 'save-instruments') {
+    const selected = Array.from(document.querySelectorAll('[data-instrument-index]:checked')).map((input) => state.instrumentMatches[Number(input.dataset.instrumentIndex)]).filter(Boolean);
+    try {
+      await api('/api/instrument-usage', { method: 'POST', body: { usageDate: document.getElementById('instrumentDate').value, sampleNo: document.getElementById('instrumentSampleNo').value, parameters, startTime: document.getElementById('instrumentStartTime').value, endTime: document.getElementById('instrumentEndTime').value, userName: document.getElementById('instrumentUserName').value, instruments: selected } });
+      notice('仪器使用记录已保存');
+      await loadData();
+    } catch (error) { showError(error); }
+  }
+}
+
+function renderFunanLedgerRow(record) {
+  const task = record.task;
+  const status = !task ? '未生成' : task.printedAt ? '已打印' : '已确认';
+  const statusClass = !task ? 'draft' : task.printedAt ? 'printed' : 'confirmed';
+  const quantity = String(record.quantity || '');
+  const displayQuantity = quantity && !/[处点组个]$/.test(quantity) ? `${quantity}处` : quantity;
+  return `
+    <tr>
+      <td><div class="report-name">${escapeHtml(record.taskNo)}</div><div class="muted">${escapeHtml(record.entrustNo)}</div></td>
+      <td>${escapeHtml(record.sampleNo)}</td>
+      <td>${escapeHtml(displayQuantity)}</td>
+      <td class="project-usage">${escapeHtml(record.usage)}</td>
+      <td>${escapeHtml(record.entrustDate)}</td>
+      <td><span class="project-status ${statusClass}">${status}</span>${task?.printedAt ? `<div class="muted">${formatTime(task.printedAt)}</div>` : ''}</td>
+      <td><button class="mini primary-mini" data-action="open-funan-task" data-ledger-id="${record.id}" type="button">${task ? '查看/补打' : '生成任务单'}</button></td>
+    </tr>
+  `;
+}
+
+async function handleFunanLedgerFileChange(event) {
+  const input = event.target.closest('[data-funan-ledger-file]');
+  const file = input?.files?.[0];
+  if (!file) return;
+  if (!/\.xlsx?$/i.test(file.name)) {
+    showError(new Error('台账只支持 .xls 或 .xlsx 文件'));
+    input.value = '';
+    return;
+  }
+  try {
+    const formData = new FormData();
+    formData.append('ledgerFile', file);
+    const response = await fetch('/api/funan-project/import', { method: 'POST', body: formData, credentials: 'same-origin' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || '台账导入失败');
+    notice(`台账已导入：新增 ${data.inserted} 条，更新 ${data.updated} 条`);
+    await loadData();
+  } catch (error) {
+    showError(error);
+  } finally {
+    input.value = '';
+  }
+}
+
+function defaultFunanTask() {
+  let saved = {};
+  try {
+    saved = JSON.parse(localStorage.getItem(FUNAN_MANUAL_FORM_STORAGE_KEY) || '{}');
+  } catch (_) {
+    saved = {};
+  }
+  return {
+    clientName: '安徽省新路建设工程集团有限责任公司',
+    projectName: '南阳大道（阜南段）修复养护工程许城路项目',
+    taskNo: '',
+    entrustNo: '',
+    sampleNo: '',
+    sampleName: '沥青混凝土',
+    sampleSpec: 'AC-13C',
+    quantity: '',
+    usage: '',
+    entrustDate: new Date().toLocaleDateString('zh-CN'),
+    testItem: '弯沉',
+    executionStandard: 'JTG 3450-2019',
+    method: 'JTG 3450-2019综合法',
+    recordNo: '',
+    reportNo: '',
+    sendDept: '综合部',
+    receiveDept: '检测部',
+    sender: '李晓东',
+    samplingLocation: '',
+    samplerWitness: '',
+    ...saved
+  };
+}
+
+function openProjectTask() {
+  state.funanTaskLedgerId = null;
+  const task = defaultFunanTask();
+  els.projectTaskTitle.textContent = '现场检测任务单和现场取样单';
+  els.projectTaskControls.classList.add('funan-manual-controls');
+  els.projectTaskControls.innerHTML = `
+    <fieldset class="form-group funan-manual-form">
+      <legend>任务单内容</legend>
+      ${projectTaskInput('clientName', '委托单位', task.clientName)}
+      ${projectTaskInput('projectName', '工程名称', task.projectName)}
+      ${projectTaskInput('usage', '工程部位/用途', task.usage)}
+      ${projectTaskInput('taskNo', '任务编号', task.taskNo)}
+      ${projectTaskInput('sampleNo', '样品编号', task.sampleNo)}
+      ${projectTaskInput('quantity', '取样数量（处）', normalizeFunanQuantity(task.quantity), false, 'number')}
+      ${projectTaskInput('entrustDate', '日期', task.entrustDate)}
+      ${projectTaskInput('sampleName', '样品名称', task.sampleName)}
+      ${renderFunanSampleSpecOptions(task.sampleSpec)}
+      ${projectTaskInput('testItem', '试验项目', task.testItem)}
+      ${projectTaskInput('executionStandard', '执行标准', task.executionStandard)}
+      ${projectTaskInput('method', '取样依据/方法', task.method)}
+      ${renderFunanTestItemOptions(task.testItem)}
+    </fieldset>
+    <div class="form-tip">委托编号、记录编号和报告编号会跟随编号自动生成；部门、下达人和取样信息使用默认值，无需填写。</div>
+  `;
+  renderProjectTaskPrintArea();
+  els.projectTaskModal.hidden = false;
+}
+
+function projectTaskInput(name, label, value, wide = false, type = 'text') {
+  const numeric = type === 'number' ? ' min="0" step="1" inputmode="numeric"' : '';
+  return `<label class="${wide ? 'form-wide' : ''}">${label}<input data-project-task-field="${name}" type="${type}"${numeric} value="${escapeAttribute(value)}"></label>`;
+}
+
+function renderFunanTestItemOptions(selected) {
+  return `<div class="form-wide project-test-options" aria-label="常用试验项目">
+    ${FUNAN_TEST_ITEM_OPTIONS.map((item) => `<button class="test-option ${item === selected ? 'active' : ''}" data-project-test-item="${escapeAttribute(item)}" type="button">${escapeHtml(item)}</button>`).join('')}
+  </div>`;
+}
+
+function renderFunanSampleSpecOptions(selected) {
+  const values = FUNAN_SAMPLE_SPEC_OPTIONS.includes(selected) ? FUNAN_SAMPLE_SPEC_OPTIONS : [selected, ...FUNAN_SAMPLE_SPEC_OPTIONS].filter(Boolean);
+  return `<div class="project-option-picker">
+    <span>样品规格/型号</span>
+    <input data-project-task-field="sampleSpec" type="hidden" value="${escapeAttribute(selected)}">
+    <div class="project-spec-options">
+      ${values.map((item) => `<button class="spec-option ${item === selected ? 'active' : ''}" data-project-sample-spec="${escapeAttribute(item)}" type="button">${escapeHtml(item)}</button>`).join('')}
+    </div>
+  </div>`;
+}
+
+function handleProjectTaskControlClick(event) {
+  const button = event.target.closest('[data-project-test-item], [data-project-sample-spec]');
+  if (!button) return;
+  const isSpec = Boolean(button.dataset.projectSampleSpec);
+  const field = isSpec ? 'sampleSpec' : 'testItem';
+  const value = isSpec ? button.dataset.projectSampleSpec : button.dataset.projectTestItem;
+  const input = els.projectTaskControls.querySelector(`[data-project-task-field="${field}"]`);
+  if (!input) return;
+  input.value = value;
+  els.projectTaskControls.querySelectorAll(isSpec ? '[data-project-sample-spec]' : '[data-project-test-item]').forEach((item) => {
+    item.classList.toggle('active', item === button);
+  });
+  saveAndRenderProjectTaskDraft();
+}
+
+function getProjectTaskValues() {
+  const task = defaultFunanTask();
+  els.projectTaskControls.querySelectorAll('[data-project-task-field]').forEach((input) => {
+    task[input.dataset.projectTaskField] = input.value.trim();
+  });
+  task.quantity = normalizeFunanQuantity(task.quantity);
+  task.entrustNo = replaceFunanPrefix(task.taskNo, 'WT');
+  task.recordNo = replaceFunanPrefix(task.sampleNo, 'JL');
+  task.reportNo = replaceFunanPrefix(task.sampleNo, 'BG');
+  return task;
+}
+
+function replaceFunanPrefix(value, prefix) {
+  const text = String(value || '').trim();
+  if (!text) return '';
+  return text.length > 2 ? `${prefix}${text.slice(2)}` : prefix;
+}
+
+function normalizeFunanQuantity(value) {
+  return String(value || '').replace(/[^\d.]/g, '');
+}
+
+function renderProjectTaskPrintArea() {
+  const data = getProjectTaskValues();
+  if (!data) return;
+  els.projectTaskPrintArea.innerHTML = `${renderFunanTaskSheet(data)}${renderFunanSamplingSheet(data)}`;
+}
+
+function saveAndRenderProjectTaskDraft() {
+  const values = getProjectTaskValues();
+  if (values) localStorage.setItem(FUNAN_MANUAL_FORM_STORAGE_KEY, JSON.stringify(values));
+  renderProjectTaskPrintArea();
+}
+
+function renderFunanTaskSheet(data) {
+  const quantity = data.quantity ? `${normalizeFunanQuantity(data.quantity)}处` : '';
+  return `
+    <section class="print-page landscape-page task-sheet-page funan-task-page">
+      <div class="paper-code">LQHXZ-CX/06-07-0</div>
+      <h2>现 场 检 测 任 务 单</h2>
+      <div class="paper-meta task-meta"><span class="paper-number">任务编号：${escapeHtml(data.taskNo)}</span><span>第 1 页，共 1 页</span></div>
+      <table class="paper-table task-paper">
+        <colgroup><col class="funan-c1"><col class="funan-c2"><col class="funan-c3"><col class="funan-c4"><col class="funan-c5"><col class="funan-c6"><col class="funan-c7"><col class="funan-c8"></colgroup>
+        <tbody>
+          <tr><th>委托单位</th><td colspan="7">${escapeHtml(data.clientName)}</td></tr>
+          <tr><th>工程名称</th><td colspan="7">${escapeHtml(data.projectName)}</td></tr>
+          <tr><th>工程部位/用途</th><td colspan="3" class="multiline">${escapeHtml(data.usage)}</td><th>委托编号</th><td colspan="3">${escapeHtml(data.entrustNo)}</td></tr>
+          <tr><th>样品名称</th><td colspan="3">${escapeHtml(data.sampleName)}</td><th>取样数量</th><td colspan="3">${escapeHtml(quantity)}</td></tr>
+          <tr><th>样品规格/型号</th><td colspan="3">${escapeHtml(data.sampleSpec)}</td><th>样品编号</th><td colspan="3">${escapeHtml(data.sampleNo)}</td></tr>
+          <tr><th>委托日期</th><td colspan="3">${escapeHtml(data.entrustDate)}</td><th>记录编号</th><td colspan="3">${escapeHtml(data.recordNo)}</td></tr>
+          <tr><th>试验项目</th><td colspan="3">${escapeHtml(data.testItem)}</td><th>报告编号</th><td colspan="3">${escapeHtml(data.reportNo)}</td></tr>
+          <tr><th>执行标准</th><td colspan="3">${escapeHtml(data.executionStandard)}</td><th>完成日期</th><td colspan="3">${escapeHtml(data.entrustDate)}</td></tr>
+          <tr><th>下达部门</th><td colspan="3">${escapeHtml(data.sendDept)}</td><th>接受部门</th><td colspan="3">${escapeHtml(data.receiveDept)}</td></tr>
+          <tr><th>下达人</th><td>${escapeHtml(data.sender)}</td><th>日期</th><td>${escapeHtml(data.entrustDate)}</td><th>接受人</th><td></td><th>日期</th><td></td></tr>
+          <tr class="task-param-row"><th>取样依据/方法</th><td colspan="7">${escapeHtml(data.method)}</td></tr>
+          <tr class="task-param-row"><th>备注</th><td colspan="7"></td></tr>
+        </tbody>
+      </table>
+    </section>
+  `;
+}
+
+function renderFunanSamplingSheet(data) {
+  const sampleLabel = data.sampleSpec || data.sampleName;
+  const sampleDate = data.entrustDate || '';
+  const copy = () => `
+    <table class="paper-table sampling-paper">
+      <tbody>
+        <tr><th>样品名称</th><td>${escapeHtml(sampleLabel)}</td></tr>
+        <tr><th>工程部位/用途</th><td>${escapeHtml(data.usage)}</td></tr>
+        <tr><th>取样地点</th><td>${escapeHtml(data.samplingLocation)}</td></tr>
+        <tr><th>取样日期</th><td>${escapeHtml(sampleDate)}</td></tr>
+        <tr><th>取样人/见证人</th><td>${escapeHtml(data.samplerWitness)}</td></tr>
+        <tr><th>备 注</th><td>取样方法：${escapeHtml(data.method)}</td></tr>
+      </tbody>
+    </table>`;
+  return `
+    <section class="print-page portrait-page sampling-sheet-page">
+      <div class="paper-code">LQHXZ-CX/34-02-0</div>
+      <h2>现 场 取 样 单</h2>
+      ${copy()}
+      ${copy()}
+      <div class="sampling-note">注：如采为共同取样，各方都应在取样单上签字，并分别留存一份。</div>
+    </section>
+  `;
+}
+
+function closeProjectTask() {
+  state.funanTaskLedgerId = null;
+  els.projectTaskModal.hidden = true;
+  els.projectTaskControls.classList.remove('funan-manual-controls');
+  els.projectTaskControls.innerHTML = '';
+  els.projectTaskPrintArea.innerHTML = '';
+}
+
+async function confirmAndPrintProjectTask() {
+  const values = getProjectTaskValues();
+  if (!values) return;
+  try {
+    els.confirmProjectTaskBtn.disabled = true;
+    els.confirmProjectTaskBtn.textContent = '确认中...';
+    localStorage.setItem(FUNAN_MANUAL_FORM_STORAGE_KEY, JSON.stringify(values));
+    printProjectTask();
+    notice('已保存本次内容，并打开两张现场单据的打印窗口');
+  } catch (error) {
+    showError(error);
+  } finally {
+    els.confirmProjectTaskBtn.disabled = false;
+    els.confirmProjectTaskBtn.textContent = '确认并打印';
+  }
+}
+
+function printProjectTask() {
+  const html = els.projectTaskPrintArea.innerHTML;
+  const frame = document.createElement('iframe');
+  frame.style.cssText = 'position:fixed;right:0;bottom:0;width:1px;height:1px;border:0;opacity:0;pointer-events:none';
+  document.body.appendChild(frame);
+  const doc = frame.contentDocument || frame.contentWindow.document;
+  doc.open();
+  doc.write(`<!doctype html><html><head><meta charset="utf-8"><title>现场检测任务单和现场取样单</title><style>html,body{margin:0;background:#fff}body.print-standalone>#formModal{display:block!important;visibility:visible!important}</style><link id="projectPrintStyles" rel="stylesheet" href="/styles.css?v=${Date.now()}"></head><body class="print-standalone"><div id="formModal"><div class="form-panel"><div class="form-print-area">${html}</div></div></div></body></html>`);
+  doc.close();
+  let didStartPrint = false;
+  const printWhenReady = () => {
+    if (didStartPrint) return;
+    didStartPrint = true;
+    frame.contentWindow.focus();
+    frame.contentWindow.print();
+    setTimeout(() => frame.remove(), 2000);
+  };
+  const styleLink = doc.getElementById('projectPrintStyles');
+  if (styleLink) {
+    styleLink.addEventListener('load', () => setTimeout(printWhenReady, 150), { once: true });
+    styleLink.addEventListener('error', printWhenReady, { once: true });
+    setTimeout(printWhenReady, 1500);
+  } else {
+    setTimeout(printWhenReady, 150);
+  }
+}
+
+function isSoftwareDownloadCategory(category) {
+  return category?.templateType === 'auxiliary' && category.name === '软件下载';
+}
+
+async function handleSoftwareFileChange(event) {
+  const input = event.target.closest('[data-auto-software-file]');
+  const file = input?.files?.[0];
+  if (!file) return;
+  try {
+    const formData = new FormData();
+    formData.append('softwareFile', file);
+    formData.append('categoryId', String(state.selectedCategoryId));
+    const response = await fetch('/api/software-upload', { method: 'POST', body: formData, credentials: 'same-origin' });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || '软件上传失败');
+    notice(`软件已上传：${data.report?.name || file.name}`);
+    await loadData();
+  } catch (error) {
+    showError(error);
+  } finally {
+    input.value = '';
+  }
+}
+
+async function handleAutoPdfFileChange(event) {
+  const input = event.target.closest('[data-auto-pdf-file]');
+  const file = input?.files?.[0];
+  if (!file) return;
+
+  if (!/\.pdf$/i.test(file.name)) {
+    showError(new Error('只能上传 PDF 文件'));
+    input.value = '';
+    return;
+  }
+
+  if (!state.selectedCategoryId) {
+    showError(new Error('请先打开标准规范下载分类后再上传 PDF'));
+    input.value = '';
+    return;
+  }
+
+  try {
+    const formData = new FormData();
+    formData.append('pdfFile', file);
+    formData.append('categoryId', String(state.selectedCategoryId));
+    const response = await fetch('/api/reports/pdf-auto-match', {
+      method: 'POST',
+      body: formData,
+      credentials: 'same-origin'
+    });
+    const data = await response.json().catch(() => ({}));
+    if (!response.ok) throw new Error(data.message || 'PDF 上传失败');
+    notice(`PDF 已上传：${data.report?.name || '标准规范文件'}`);
+    await loadData();
+  } catch (error) {
+    showError(error);
+  } finally {
+    input.value = '';
+  }
+}
+
+function isVideoCategorySelected() {
+  const selectedCategory = state.categories.find((item) => item.id === state.selectedCategoryId);
+  return state.selectedTemplateType === 'video' || selectedCategory?.templateType === 'video';
+}
+
+function renderVideos() {
+  const keyword = state.search.toLowerCase();
+  const selectedCategory = state.categories.find((item) => item.id === state.selectedCategoryId);
+  const selectedVideoCategory = selectedCategory?.templateType === 'video' ? selectedCategory.name : '';
+  const filtered = state.videos.filter((video) => {
+    const text = `${video.title} ${video.category} ${video.lecturer} ${video.fileName} ${video.remarks}`.toLowerCase();
+    if (selectedVideoCategory && video.category !== selectedVideoCategory) return false;
+    return !keyword || text.includes(keyword);
+  });
+
+  els.contentTitle.textContent = selectedVideoCategory ? `检测视频 - ${selectedVideoCategory}` : '检测视频';
+  const searchText = state.search ? `，关键词：${state.search}` : '';
+  els.reportCount.textContent = `共 ${filtered.length} 个视频${searchText}`;
+
+  if (filtered.length === 0) {
+    els.reportList.innerHTML = `
+      <div class="empty video-empty">
+        暂无检测视频。管理员请先把 mp4 视频放到 ${escapeHtml(state.videoDir || 'E:\\恒信通视频')}，再到管理后台登记。
+      </div>
+    `;
+    return;
+  }
+
+  els.reportList.innerHTML = `
+    <table class="report-table video-table">
+      <thead>
+        <tr>
+          <th>课程名称</th>
+          <th>分类</th>
+          <th>讲师/来源</th>
+          <th>视频文件</th>
+          <th>登记信息</th>
+          <th>备注</th>
+          <th>操作</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${filtered.map(renderVideoRow).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function renderVideoRow(video) {
+  return `
+    <tr>
+      <td data-label="课程名称">
+        <div class="report-name">${escapeHtml(video.title)}</div>
+        <div class="muted">编号：${video.id}</div>
+      </td>
+      <td data-label="分类">${escapeHtml(video.category || '未分类')}</td>
+      <td data-label="讲师/来源">${escapeHtml(video.lecturer || '暂无')}</td>
+      <td data-label="视频文件"><span class="muted">${escapeHtml(video.fileName)}</span></td>
+      <td data-label="登记信息">
+        <div>${escapeHtml(video.createdByName || '暂无')}</div>
+        <div class="muted">${formatTime(video.updatedAt || video.createdAt)}</div>
+      </td>
+      <td data-label="备注">${escapeHtml(video.remarks || '')}</td>
+      <td data-label="操作">
+        <div class="row-actions">
+          <button class="mini primary-mini" data-action="play-video" data-video-id="${video.id}" type="button">播放</button>
+          <a class="mini file-btn" href="/videos/${video.id}/download">下载</a>
+          ${canManageTemplates() ? `<button class="mini" data-action="edit-video" data-video-id="${video.id}" type="button">编辑</button>` : ''}
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
 async function handleReportListClick(event) {
   const button = event.target.closest('button[data-action]');
   if (!button) return;
+  const videoId = Number(button.dataset.videoId);
   const reportId = Number(button.dataset.reportId);
   const action = button.dataset.action;
 
+  if (action === 'open-funan-manual-forms') {
+    openProjectTask();
+    return;
+  }
+
+  if (action === 'open-funan-task') {
+    openProjectTask(Number(button.dataset.ledgerId));
+    return;
+  }
+
+  if (action === 'import-funan-ledger') {
+    els.reportList.querySelector('[data-funan-ledger-file]')?.click();
+    return;
+  }
+
+  if (action === 'paste-funan') {
+    await handleFunanPaste();
+    return;
+  }
+
+  if (action === 'auto-upload-pdf') {
+    els.reportList.querySelector('[data-auto-pdf-file]')?.click();
+    return;
+  }
+
+  if (action === 'auto-upload-software') {
+    els.reportList.querySelector('[data-auto-software-file]')?.click();
+    return;
+  }
+
+  if (action === 'play-video') {
+    openVideo(videoId);
+    return;
+  }
+
+  if (action === 'edit-video') {
+    openAdmin();
+    setAdminTab('videos');
+    fillVideoForm(videoId);
+    return;
+  }
+
   if (action === 'preview') {
     openPreview(reportId);
+    return;
+  }
+
+  if (action === 'upload-pdf') {
+    const uploadBox = button.closest('.row-pdf-upload');
+    const input = uploadBox?.querySelector('[data-pdf-file]');
+    const file = input?.files?.[0];
+    if (!file) {
+      showError(new Error('请先选择 PDF 文件'));
+      return;
+    }
+    if (!/\.pdf$/i.test(file.name)) {
+      showError(new Error('只能上传 PDF 文件'));
+      return;
+    }
+    try {
+      button.disabled = true;
+      button.textContent = '上传中...';
+      const formData = new FormData();
+      formData.append('pdfFile', file);
+      const response = await fetch(`/api/reports/${reportId}/pdf`, {
+        method: 'POST',
+        body: formData,
+        credentials: 'same-origin'
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.message || 'PDF 上传失败');
+      notice('PDF 已上传，旧版本已保留在版本记录中');
+      await loadData();
+    } catch (error) {
+      showError(error);
+    } finally {
+      button.disabled = false;
+      button.textContent = '上传 PDF';
+    }
     return;
   }
 
@@ -628,6 +1374,24 @@ async function handleReportListClick(event) {
   }
 }
 
+async function handleFunanPaste() {
+  const input = document.getElementById('funanPasteInput');
+  const text = input?.value || '';
+  if (!text.trim()) {
+    showError(new Error('请先从 Excel 复制一行台账，再粘贴到输入框'));
+    return;
+  }
+  try {
+    const data = await api('/api/funan-project/paste', { method: 'POST', body: { text } });
+    notice(`已识别 ${data.total} 条台账，正在打开第一条任务单`);
+    await loadData();
+    const first = (state.funanProject?.records || []).find((record) => data.taskNos.includes(record.taskNo));
+    if (first) openProjectTask(first.id);
+  } catch (error) {
+    showError(error);
+  }
+}
+
 function openPreview(reportId) {
   const report = state.reports.find((item) => item.id === reportId);
   if (!report) {
@@ -650,6 +1414,39 @@ function openPreview(reportId) {
 function closePreview() {
   els.previewModal.hidden = true;
   els.previewBody.innerHTML = '';
+}
+
+function openVideo(videoId) {
+  const video = state.videos.find((item) => item.id === videoId);
+  if (!video) {
+    showError(new Error('没有找到这个视频'));
+    return;
+  }
+  els.videoTitle.textContent = video.title;
+  els.trainingVideoPlayer.src = `/videos/${video.id}`;
+  els.trainingVideoPlayer.playbackRate = 1;
+  els.videoModal.querySelectorAll('[data-speed]').forEach((button) => {
+    button.classList.toggle('active', button.dataset.speed === '1');
+  });
+  els.videoModal.hidden = false;
+}
+
+function closeVideo() {
+  els.trainingVideoPlayer.pause();
+  els.trainingVideoPlayer.removeAttribute('src');
+  els.trainingVideoPlayer.load();
+  els.videoModal.hidden = true;
+}
+
+function handleVideoSpeedClick(event) {
+  const button = event.target.closest('button[data-speed]');
+  if (!button) return;
+  const speed = Number(button.dataset.speed);
+  if (!speed) return;
+  els.trainingVideoPlayer.playbackRate = speed;
+  els.videoModal.querySelectorAll('[data-speed]').forEach((item) => {
+    item.classList.toggle('active', item === button);
+  });
 }
 
 function openEntrustForm(reportId) {
@@ -676,6 +1473,8 @@ function closeForm() {
 }
 
 function renderEntrustControls() {
+  state.quickEntrustBatch = null;
+  const today = new Date().toISOString().slice(0, 10);
   els.formControls.innerHTML = `
     <fieldset class="form-group">
       <legend>基础信息</legend>
@@ -713,23 +1512,23 @@ function renderEntrustControls() {
       <legend>编号和日期</legend>
       <label>
         委托编号
-        <input id="formEntrustNo" value="WT-2026-0005-A06">
+        <input id="formEntrustNo" class="form-readonly" readonly>
       </label>
       <label>
         任务编号
-        <input id="formTaskNo" value="RW-2026-0005-A06">
+        <input id="formTaskNo" class="form-readonly" readonly>
       </label>
       <label>
         样品流水号
-        <input id="formSampleSerial" value="0001">
+        <input id="formSampleSerial">
       </label>
       <label>
         委托日期
-        <input id="formEntrustDate" type="date" value="2026-05-19">
+        <input id="formEntrustDate" type="date" value="${today}">
       </label>
       <label>
         接样日期
-        <input id="formReceiveDate" type="date" value="2026-05-19">
+        <input id="formReceiveDate" type="date" value="${today}">
       </label>
       <label>
         计划完成日期
@@ -737,7 +1536,14 @@ function renderEntrustControls() {
       </label>
     </fieldset>
 
-    <fieldset class="form-group">
+    <fieldset class="form-group form-group-wide quick-entrust-paste">
+      <legend>快速复制任务单</legend>
+      <div class="quick-paste-help">从 Excel 复制委托单或任务单的一行（带表头也可以），粘贴后自动识别并填入上方内容。</div>
+      <textarea id="quickEntrustPaste" rows="3" placeholder="在 Excel 选中一行或多行后按 Ctrl+C，再粘贴到这里"></textarea>
+      <button class="mini primary" data-form-action="parse-quick-entrust" type="button">识别并填表</button>
+    </fieldset>
+
+    <fieldset class="form-group" hidden>
       <legend>人员和部门</legend>
       <label>
         委托人
@@ -745,7 +1551,7 @@ function renderEntrustControls() {
       </label>
       <label>
         接样人
-        <input id="formReceiver" placeholder="可填写姓名">
+        <input id="formReceiver" value="${ENTRUST_DEFAULT_RECEIVER}">
       </label>
       <label>
         见证人
@@ -768,37 +1574,86 @@ function renderEntrustControls() {
       </label>
     </fieldset>
 
-    <fieldset class="form-group form-group-wide">
+    <fieldset class="form-group form-group-wide" hidden>
       <legend>补充说明</legend>
       <label>
         备注
         <input id="formRemark" placeholder="可填写补充说明">
       </label>
       <div class="form-actions-line">
+        <button class="mini primary" data-form-action="create-entrust-record" type="button">正式登记并生成编号</button>
         <button class="mini" data-form-action="save-draft" type="button">保存草稿</button>
+        <button class="mini" data-form-action="register-sequence" type="button">登记本次编号</button>
         <button class="mini" data-form-action="load-draft" type="button">读取草稿</button>
         <button class="mini danger-btn" data-form-action="clear-form" type="button">清空重填</button>
       </div>
       <div class="form-tip">提示：下拉菜单会自动带出基础内容；表格里浅黄色格子还能直接点进去修改，适合临时改字。</div>
     </fieldset>
+
+    <fieldset class="form-group form-group-wide" hidden>
+      <legend>正式委托台账</legend>
+      <div class="form-actions-line">
+        <input id="entrustLedgerKeyword" placeholder="搜委托编号、单位、工程、样品">
+        <button class="mini" data-form-action="load-entrust-ledger" type="button">刷新台账</button>
+        <button class="mini" data-form-action="export-entrust-ledger" type="button">导出台账</button>
+      </div>
+      <div id="entrustLedgerList" class="ledger-list">
+        <div class="empty compact">点击“刷新台账”查看最近登记</div>
+      </div>
+    </fieldset>
   `;
-  applyClientDefaults(false);
+  applyEntrustDefaults({ resetProject: false, resetSerial: true });
 }
 
 function handleEntrustControlChange(event) {
-  if (event.target.id === 'formClient') {
-    applyClientDefaults(true);
+  if (event.target.id === 'formClient' || event.target.id === 'formSample') {
+    applyEntrustDefaults({ resetProject: event.target.id === 'formClient', resetSerial: true });
+  } else if (event.target.id === 'formEntrustDate') {
+    setFormValue('formReceiveDate', readFormValue('formEntrustDate'));
+    applyEntrustDefaults({ resetProject: false, resetSerial: false });
+  } else if (event.target.id === 'formEntrustNo') {
+    syncTaskNoFromEntrustNo();
+  } else if (event.target.id === 'formSampleSerial') {
+    if (event.type === 'change') {
+      setFormValue('formSampleSerial', normalizeSerial(readFormValue('formSampleSerial')));
+      syncEntrustNumbersFromSampleSerial();
+    } else if (/^\d{4}$/.test(readFormValue('formSampleSerial'))) {
+      syncEntrustNumbersFromSampleSerial();
+    }
   }
   renderEntrustPrintArea();
 }
 
-function handleEntrustControlClick(event) {
+async function handleEntrustControlClick(event) {
   const button = event.target.closest('[data-form-action]');
   if (!button) return;
   const action = button.dataset.formAction;
+  if (action === 'create-entrust-record') {
+    await createEntrustRecordFromForm(button);
+    return;
+  }
+  if (action === 'parse-quick-entrust') {
+    parseQuickEntrustPaste();
+    return;
+  }
   if (action === 'save-draft') {
     localStorage.setItem('hxtEntrustDraft', JSON.stringify(collectEntrustDraft()));
     notice('委托单草稿已保存到本机浏览器');
+    return;
+  }
+  if (action === 'register-sequence') {
+    registerEntrustSequence();
+    applyEntrustDefaults({ resetProject: false, resetSerial: true });
+    renderEntrustPrintArea();
+    notice('本次编号已登记，下次会自动顺延');
+    return;
+  }
+  if (action === 'load-entrust-ledger') {
+    await loadEntrustLedger();
+    return;
+  }
+  if (action === 'export-entrust-ledger') {
+    window.location.href = '/api/export/entrust-records';
     return;
   }
   if (action === 'load-draft') {
@@ -808,23 +1663,353 @@ function handleEntrustControlClick(event) {
       return;
     }
     applyEntrustDraft(JSON.parse(draft));
+    applyEntrustDefaults({ resetProject: false, resetSerial: false });
     renderEntrustPrintArea();
     notice('草稿已读取');
     return;
   }
   if (action === 'clear-form') {
     if (!confirm('确定清空当前填写内容吗？只清空网页表单，不会删除模板文件。')) return;
+    state.quickEntrustBatch = null;
     renderEntrustControls();
     renderEntrustPrintArea();
     notice('已清空为默认内容');
   }
 }
 
-function applyClientDefaults(resetProject) {
+function parseQuickEntrustPaste() {
+  const input = document.getElementById('quickEntrustPaste');
+  const rows = parseQuickClipboardRows(input?.value || '');
+  if (!rows.length) {
+    showError(new Error('请先从 Excel 复制委托单或任务单内容，再粘贴到输入框'));
+    return;
+  }
+
+  const header = rows[0].map((value) => String(value).trim().replace(/[：:]/g, ''));
+  const hasHeader = header.some((value) => /委托编号|任务编号|样品编号|工程部位|样品名称|收样时间/.test(value));
+  const start = hasHeader ? 1 : 0;
+  const column = (patterns, fallback) => {
+    const index = hasHeader ? header.findIndex((value) => patterns.some((pattern) => pattern.test(value))) : fallback;
+    return index < 0 ? fallback : index;
+  };
+  const indexes = {
+    entrust: column([/委托编号/], 1), task: column([/任务编号/], 2), sampleNo: column([/样品编号/, /样品编码/], 3),
+    sampleName: column([/样品名称/, /试样名称/], 5), spec: column([/规格/, /型号/], 6), usage: column([/工程部位/, /用途/], 7),
+    quantity: column([/样品数量/, /取样数量/, /数量/], 8), date: column([/收样时间/, /收样日期/, /日期/], 9)
+  };
+  const inherited = {};
+  const items = [];
+  let groupEntrustNo = '';
+  rows.slice(start).forEach((rawRow) => {
+    const row = rawRow.slice();
+    const rowEntrustNo = String(row[indexes.entrust] || '').trim();
+    if (rowEntrustNo && /^WT-/i.test(rowEntrustNo)) {
+      if (!groupEntrustNo) groupEntrustNo = rowEntrustNo;
+      if (rowEntrustNo !== groupEntrustNo) return;
+    }
+    const read = (key) => {
+      const value = String(row[indexes[key]] || '').trim();
+      if (value) inherited[key] = value;
+      return value || inherited[key] || '';
+    };
+    const sampleNo = read('sampleNo');
+    const sampleName = read('sampleName');
+    if (!sampleNo && !sampleName) return;
+    const parsed = parseSampleCode(sampleNo);
+    const matched = ENTRUST_SAMPLES.find((sample) => sample.name === sampleName || sampleName.includes(sample.name));
+    const quantityText = read('quantity');
+    const quantity = extractQuickQuantity(quantityText, items.length) || quantityText || matched?.quantity || '';
+    const sample = {
+      ...(matched || ENTRUST_SAMPLES[0]),
+      name: sampleName || matched?.name || '样品',
+      spec: read('spec') || matched?.spec || '/',
+      model: read('spec') || matched?.model || '/',
+      quantity,
+      usage: read('usage') || matched?.usage || '路基'
+    };
+    const sampleCode = sampleNo || `YP-${parsed?.year || '2026'}-${parsed?.prefix || 'XJL-'}${parsed?.serial || '0001'}-${parsed?.suffix || 'A13'}`;
+    items.push({
+      sample, sampleCode,
+      recordNo: sampleCode.replace(/^YP-/i, 'JL-'),
+      reportNo: sampleCode.replace(/^YP-/i, 'BG-'),
+      sampleNo,
+      dateText: read('date')
+    });
+  });
+  const firstRow = rows.slice(start).find((row) => row.some((cell) => /WT-|RW-/i.test(String(cell)))) || rows[start] || [];
+  const allText = rows.map((row) => row.join(' ')).join(' ');
+  const entrustNo = firstRow[indexes.entrust] || (allText.match(/WT-\d{4}-\d{4}-[A-Z]\d{2}/i) || [])[0] || '';
+  const taskNo = firstRow[indexes.task] || (allText.match(/RW-\d{4}-\d{4}-[A-Z]\d{2}/i) || [])[0] || '';
+  const project = inherited.project || '';
+  const dateText = items[0]?.dateText || (allText.match(/20\d{2}[-年\/.]\d{1,2}[-月\/.]\d{1,2}日?/) || [])[0] || '';
+  if (!items.length || (!entrustNo && !taskNo)) {
+    showError(new Error('没有识别到委托编号、任务编号或样品信息，请复制 Excel 中完整的一行'));
+    return;
+  }
+
+  const entrustParsed = parseEntrustNo(entrustNo) || parseEntrustNo(taskNo);
+  if (entrustParsed) {
+    const clientIndex = ENTRUST_CLIENTS.findIndex((client) => client.code.toUpperCase() === entrustParsed.projectCode);
+    if (clientIndex >= 0) setFormValue('formClient', clientIndex);
+  }
+  const sampleIndex = ENTRUST_SAMPLES.findIndex((sample) => sample.name === items[0].sample.name || allText.includes(sample.name));
+  if (sampleIndex >= 0) setFormValue('formSample', sampleIndex);
+  if (entrustNo) setFormValue('formEntrustNo', entrustNo);
+  if (taskNo) setFormValue('formTaskNo', taskNo);
+  const serial = extractSampleSerial(items[0].sampleCode) || entrustParsed?.serial;
+  if (serial) setFormValue('formSampleSerial', normalizeSerial(serial));
+  if (project) setFormValue('formProject', project);
+  if (items[0].sample.usage) setFormValue('formUsage', items[0].sample.usage);
+  const date = normalizeQuickDate(dateText);
+  if (date) {
+    setFormValue('formEntrustDate', date);
+    setFormValue('formReceiveDate', date);
+  }
+  state.quickEntrustBatch = {
+    entrustNo,
+    taskNo,
+    items,
+    sample: {
+      ...items[0].sample,
+      name: items.map((item) => item.sample.name).join('\n'),
+      spec: items.map((item) => item.sample.spec).join('\n'),
+      model: items.map((item) => item.sample.model).join('\n'),
+      quantity: items.map((item) => item.sample.quantity).join('\n'),
+      usage: items[0].sample.usage
+    }
+  };
+  renderEntrustPrintArea();
+  notice(`已识别 1 张委托单、${items.length} 张流转单，请核对后打印`);
+}
+
+function parseQuickClipboardRows(text) {
+  return String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n').split('\n')
+    .map((line) => line.split('\t').map((cell) => cell.trim()))
+    .filter((row) => row.some(Boolean));
+}
+
+function findMatchingSampleText(text) {
+  return ENTRUST_SAMPLES.find((sample) => String(text).includes(sample.name))?.name || '';
+}
+
+function extractSampleSerial(value) {
+  const match = String(value || '').match(/-(\d{4})-[A-Z]\d{2}$/i);
+  return match?.[1] || '';
+}
+
+function normalizeQuickDate(value) {
+  const match = String(value || '').match(/(20\d{2})\D(\d{1,2})\D(\d{1,2})/);
+  if (!match) return '';
+  return `${match[1]}-${String(match[2]).padStart(2, '0')}-${String(match[3]).padStart(2, '0')}`;
+}
+
+function extractQuickQuantity(value, index) {
+  const matches = String(value || '').match(/\d+(?:\.\d+)?\s*(?:kg|克|组|块)/gi) || [];
+  return matches[index] || (matches.length === 1 ? matches[0] : '');
+}
+
+function parseSampleCode(value) {
+  const match = String(value || '').match(/^YP-(\d{4})-(.+)-(\d{4})-([A-Z]\d{2})$/i);
+  if (!match) return null;
+  return { year: match[1], prefix: `${match[2]}-`, serial: match[3], suffix: match[4] };
+}
+
+async function createEntrustRecordFromForm(button) {
+  const data = getEntrustValues();
+  try {
+    button.disabled = true;
+    button.textContent = '正在登记...';
+    const response = await api('/api/entrust-records', {
+      method: 'POST',
+      body: {
+        clientName: data.client.name,
+        projectName: data.project,
+        projectCode: data.client.code,
+        sampleName: data.sample.name,
+        entrustDate: readFormValue('formEntrustDate'),
+        receiveDate: readFormValue('formReceiveDate') || readFormValue('formEntrustDate'),
+        receiver: data.receiver,
+        sender: data.sender,
+        sendDept: data.sendDept,
+        receiveDept: data.receiveDept,
+        usage: data.sample.usage,
+        remark: data.remark,
+        samplePrefix: data.sample.samplePrefix,
+        sampleSuffix: data.sample.suffix,
+        sampleCode: data.sampleCode,
+        recordNo: data.recordNo,
+        reportNo: data.reportNo
+      }
+    });
+    applyEntrustRecord(response.record);
+    renderEntrustPrintArea();
+    await loadEntrustLedger();
+    notice(`已正式登记：${response.record.entrustNo}`);
+  } catch (error) {
+    showError(error);
+  } finally {
+    button.disabled = false;
+    button.textContent = '正式登记并生成编号';
+  }
+}
+
+function applyEntrustRecord(record) {
+  setFormValue('formEntrustNo', record.entrustNo);
+  setFormValue('formTaskNo', record.taskNo);
+  setFormValue('formSampleSerial', record.sampleSerial);
+  setFormValue('formEntrustDate', record.entrustDate);
+  setFormValue('formReceiveDate', record.receiveDate);
+  setFormValue('formReceiver', record.receiver || ENTRUST_DEFAULT_RECEIVER);
+}
+
+async function loadEntrustLedger() {
+  const list = document.getElementById('entrustLedgerList');
+  if (!list) return;
+  const keyword = document.getElementById('entrustLedgerKeyword')?.value.trim() || '';
+  list.innerHTML = '<div class="empty compact">正在读取台账...</div>';
+  try {
+    const data = await api(`/api/entrust-records${keyword ? `?keyword=${encodeURIComponent(keyword)}` : ''}`);
+    renderEntrustLedger(data.records || []);
+  } catch (error) {
+    list.innerHTML = `<div class="empty compact">${escapeHtml(error.message)}</div>`;
+  }
+}
+
+function renderEntrustLedger(records) {
+  const list = document.getElementById('entrustLedgerList');
+  if (!list) return;
+  if (!records.length) {
+    list.innerHTML = '<div class="empty compact">暂无委托台账记录</div>';
+    return;
+  }
+
+  list.innerHTML = `
+    <table class="report-table compact-ledger">
+      <thead>
+        <tr>
+          <th>委托编号</th>
+          <th>任务编号</th>
+          <th>委托单位/工程</th>
+          <th>样品</th>
+          <th>日期/接样人</th>
+        </tr>
+      </thead>
+      <tbody>
+        ${records.map((record) => `
+          <tr>
+            <td data-label="委托编号">${escapeHtml(record.entrustNo)}</td>
+            <td data-label="任务编号">${escapeHtml(record.taskNo)}</td>
+            <td data-label="委托单位/工程">
+              <div>${escapeHtml(record.clientName)}</div>
+              <div class="muted">${escapeHtml(record.projectName)}</div>
+            </td>
+            <td data-label="样品">
+              <div>${escapeHtml(record.sampleName)}</div>
+              <div class="muted">流水号：${escapeHtml(record.sampleSerial)}</div>
+            </td>
+            <td data-label="日期/接样人">
+              <div>${escapeHtml(record.entrustDate)} / ${escapeHtml(record.receiveDate)}</div>
+              <div class="muted">${escapeHtml(record.receiver)}${record.createdByName ? ` / ${escapeHtml(record.createdByName)}` : ''}</div>
+            </td>
+          </tr>
+        `).join('')}
+      </tbody>
+    </table>
+  `;
+}
+
+function applyEntrustDefaults({ resetProject = false, resetSerial = false } = {}) {
   const client = ENTRUST_CLIENTS[Number(readFormValue('formClient'))] || ENTRUST_CLIENTS[0];
-  setFormValue('formEntrustNo', `WT-2026-0005-${client.code}`);
-  setFormValue('formTaskNo', `RW-2026-0005-${client.code}`);
+  const sample = ENTRUST_SAMPLES[Number(readFormValue('formSample'))] || ENTRUST_SAMPLES[0];
+  const year = (readFormValue('formEntrustDate') || new Date().toISOString().slice(0, 10)).slice(0, 4) || '2026';
+  const entrustSerial = getNextEntrustSerial(year, client.code);
+  const sampleSerial = resetSerial ? getNextSampleSerial(year, client.code, sample.name) : normalizeSerial(readFormValue('formSampleSerial') || '1');
+
+  setFormValue('formEntrustNo', buildEntrustNo('WT', year, entrustSerial, client.code));
+  setFormValue('formTaskNo', buildEntrustNo('RW', year, entrustSerial, client.code));
+  setFormValue('formSampleSerial', sampleSerial);
+  syncEntrustNumbersFromSampleSerial();
+  if (!readFormValue('formReceiver')) setFormValue('formReceiver', ENTRUST_DEFAULT_RECEIVER);
+  if (!readFormValue('formReceiveDate')) setFormValue('formReceiveDate', readFormValue('formEntrustDate'));
   if (resetProject || !readFormValue('formProject')) setFormValue('formProject', client.project);
+}
+
+function buildEntrustNo(prefix, year, serial, projectCode) {
+  return `${prefix}-${year}-${normalizeSerial(serial)}-${projectCode}`;
+}
+
+function syncTaskNoFromEntrustNo() {
+  const entrustNo = parseEntrustNo(readFormValue('formEntrustNo'));
+  if (!entrustNo) return;
+  setFormValue('formTaskNo', buildEntrustNo('RW', entrustNo.year, entrustNo.serial, entrustNo.projectCode));
+}
+
+function syncEntrustNumbersFromSampleSerial() {
+  const sampleSerial = normalizeSerial(readFormValue('formSampleSerial'));
+  const entrustNo = parseEntrustNo(readFormValue('formEntrustNo'));
+  const taskNo = parseEntrustNo(readFormValue('formTaskNo'));
+  if (entrustNo) {
+    setFormValue('formEntrustNo', buildEntrustNo('WT', entrustNo.year, sampleSerial, entrustNo.projectCode));
+  }
+  if (taskNo) {
+    setFormValue('formTaskNo', buildEntrustNo('RW', taskNo.year, sampleSerial, taskNo.projectCode));
+  }
+}
+
+function normalizeSerial(value) {
+  const number = Math.max(1, Number.parseInt(String(value || '').replace(/\D/g, ''), 10) || 1);
+  return String(number).padStart(4, '0');
+}
+
+function readEntrustSequences() {
+  try {
+    return JSON.parse(localStorage.getItem(ENTRUST_SEQUENCE_STORAGE_KEY) || '{}');
+  } catch (_) {
+    return {};
+  }
+}
+
+function writeEntrustSequences(sequences) {
+  localStorage.setItem(ENTRUST_SEQUENCE_STORAGE_KEY, JSON.stringify(sequences));
+}
+
+function getNextEntrustSerial(year, projectCode) {
+  const sequences = readEntrustSequences();
+  return normalizeSerial((sequences.entrust?.[`${year}:${projectCode}`] || 0) + 1);
+}
+
+function getNextSampleSerial(year, projectCode, sampleName) {
+  const sequences = readEntrustSequences();
+  return normalizeSerial((sequences.samples?.[`${year}:${projectCode}:${sampleName}`] || 0) + 1);
+}
+
+function registerEntrustSequence() {
+  const client = ENTRUST_CLIENTS[Number(readFormValue('formClient'))] || ENTRUST_CLIENTS[0];
+  const sample = ENTRUST_SAMPLES[Number(readFormValue('formSample'))] || ENTRUST_SAMPLES[0];
+  const entrustNo = parseEntrustNo(readFormValue('formEntrustNo'));
+  const year = entrustNo?.year || (readFormValue('formEntrustDate') || new Date().toISOString().slice(0, 10)).slice(0, 4) || '2026';
+  const entrustSerial = Number.parseInt(entrustNo?.serial || '1', 10) || 1;
+  const sampleSerial = Number.parseInt(normalizeSerial(readFormValue('formSampleSerial')), 10) || 1;
+  const sequences = readEntrustSequences();
+
+  sequences.entrust = sequences.entrust || {};
+  sequences.samples = sequences.samples || {};
+  const entrustKey = `${year}:${client.code}`;
+  const sampleKey = `${year}:${client.code}:${sample.name}`;
+  sequences.entrust[entrustKey] = Math.max(sequences.entrust[entrustKey] || 0, entrustSerial);
+  sequences.samples[sampleKey] = Math.max(sequences.samples[sampleKey] || 0, sampleSerial);
+  writeEntrustSequences(sequences);
+}
+
+function parseEntrustNo(value) {
+  const match = String(value || '').match(/^(WT|RW)-(\d{4})-(\d{4})-([A-Z]\d{2})$/i);
+  if (!match) return null;
+  return {
+    prefix: match[1].toUpperCase(),
+    year: match[2],
+    serial: match[3],
+    projectCode: match[4].toUpperCase()
+  };
 }
 
 function collectEntrustDraft() {
@@ -856,19 +2041,23 @@ function readFormValue(id) {
 function getEntrustValues() {
   const client = ENTRUST_CLIENTS[Number(readFormValue('formClient'))] || ENTRUST_CLIENTS[0];
   const sample = ENTRUST_SAMPLES[Number(readFormValue('formSample'))] || ENTRUST_SAMPLES[0];
-  const entrustNo = readFormValue('formEntrustNo') || `WT-2026-0005-${client.code}`;
-  const taskNo = readFormValue('formTaskNo') || `RW-2026-0005-${client.code}`;
-  const year = (readFormValue('formEntrustDate') || '2026-05-19').slice(0, 4) || '2026';
-  const serial = readFormValue('formSampleSerial') || '0001';
+  const year = (readFormValue('formEntrustDate') || new Date().toISOString().slice(0, 10)).slice(0, 4) || '2026';
+  const entrustSerial = getNextEntrustSerial(year, client.code);
+  const entrustNo = readFormValue('formEntrustNo') || buildEntrustNo('WT', year, entrustSerial, client.code);
+  const taskNo = readFormValue('formTaskNo') || buildEntrustNo('RW', year, entrustSerial, client.code);
+  const serial = normalizeSerial(readFormValue('formSampleSerial') || getNextSampleSerial(year, client.code, sample.name));
   const sampleCode = `YP-${year}-${sample.samplePrefix}${serial}-${sample.suffix}`;
   const recordNo = `JL-${year}-${sample.samplePrefix}${serial}-${sample.suffix}`;
   const reportNo = `BG-${year}-${sample.samplePrefix}${serial}-${sample.suffix}`;
 
-  return {
+  const data = {
     client,
     sample: {
       ...sample,
-      usage: readFormValue('formUsage') || sample.usage
+      usage: readFormValue('formUsage') || sample.usage,
+      origin: getTrialOriginSummary() || sample.origin,
+      standard: getCombinedTrialStandards() || getTrialConfigValue('水泥', 'standard', sample.standard),
+      params: getCombinedTrialParams() || getTrialConfigValue('水泥', 'params', sample.params)
     },
     entrustNo,
     taskNo,
@@ -876,10 +2065,10 @@ function getEntrustValues() {
     address: readFormValue('formAddress') || '/',
     postcode: readFormValue('formPostcode') || '/',
     entrustDate: formatFormDate(readFormValue('formEntrustDate')),
-    receiveDate: formatFormDate(readFormValue('formReceiveDate')),
+    receiveDate: formatFormDate(readFormValue('formReceiveDate') || readFormValue('formEntrustDate')),
     finishDate: formatFormDate(readFormValue('formFinishDate')),
     sender: readFormValue('formSender'),
-    receiver: readFormValue('formReceiver'),
+    receiver: readFormValue('formReceiver') || ENTRUST_DEFAULT_RECEIVER,
     witness: readFormValue('formWitness'),
     sendDept: readFormValue('formSendDept') || '综合部',
     receiveDept: readFormValue('formReceiveDept') || '检测部',
@@ -889,12 +2078,24 @@ function getEntrustValues() {
     recordNo,
     reportNo
   };
+  if (state.quickEntrustBatch) {
+    const batch = state.quickEntrustBatch;
+    data.entrustNo = batch.entrustNo || data.entrustNo;
+    data.taskNo = batch.taskNo || data.taskNo;
+    data.sample = { ...data.sample, ...batch.sample };
+    data.sampleCode = batch.items[0]?.sampleCode || data.sampleCode;
+    data.recordNo = batch.items[0]?.recordNo || data.recordNo;
+    data.reportNo = batch.items[0]?.reportNo || data.reportNo;
+    data.taskItems = batch.items;
+  }
+  return data;
 }
 
 function renderEntrustPrintArea() {
   if (!els.formPrintArea) return;
   const data = getEntrustValues();
-  els.formPrintArea.innerHTML = renderEntrustSheet(data) + renderTaskSheet(data);
+  const taskItems = data.taskItems?.length ? data.taskItems : [data];
+  els.formPrintArea.innerHTML = renderEntrustSheet(data) + taskItems.map((item) => renderTaskSheet({ ...data, ...item })).join('');
 }
 
 function getCurrentPrintableFormHtml() {
@@ -1019,19 +2220,19 @@ function renderEntrustSheet(data) {
           </tr>
           <tr>
             <th>样品名称</th>
-            <td colspan="3">${editableText(data.sample.name, true)}</td>
+            <td colspan="3"><span class="editable-print multiline sample-name-print" contenteditable="true">${escapeHtml(getTrialCategorySummary(data))}</span></td>
             <th>规格或型号</th>
-            <td>${editableText(data.sample.model || data.sample.spec)}</td>
+            <td><span class="editable-print multiline trial-spec-print" contenteditable="true">${escapeHtml(getTrialSpecSummary(data) || data.sample.model || data.sample.spec || '')}</span></td>
           </tr>
           <tr>
             <th>来样数量/组数</th>
-            <td colspan="3">${editableText(data.sample.quantity, true)}</td>
+            <td colspan="3"><span class="editable-print sample-quantity-print" contenteditable="true">${escapeHtml(getTrialFieldSummary(data, 'quantity'))}</span></td>
             <th>备样组数</th>
             <td>${editableText('/')}</td>
           </tr>
           <tr>
             <th>样品产地</th>
-            <td colspan="3">${editableText(data.sample.origin, true)}</td>
+            <td colspan="3"><span class="editable-print multiline trial-origin-print" contenteditable="true">${escapeHtml(data.origin || data.sample.origin || '')}</span></td>
             <th>检测类别</th>
             <td>${editableText(data.sample.category)}</td>
           </tr>
@@ -1039,21 +2240,21 @@ function renderEntrustSheet(data) {
             <th>批号</th>
             <td colspan="3">${editableText('/')}</td>
             <th>质保书</th>
-            <td><span class="check checked"></span>有 <span class="check"></span>无 <span class="check"></span>后送</td>
+            <td><span class="check" data-check-group="warranty"></span>有 <span class="check" data-check-group="warranty"></span>无 <span class="check" data-check-group="warranty"></span>后送</td>
           </tr>
           <tr>
             <th>试样外观</th>
-            <td colspan="3">${editableText(data.sample.appearance, true)}</td>
+            <td colspan="3"><span class="editable-print multiline sample-appearance-print" contenteditable="true">${escapeHtml(getTrialFieldSummary(data, 'appearance'))}</span></td>
             <th>工程部位/用途</th>
             <td>${editableText(data.sample.usage)}</td>
           </tr>
           <tr>
             <th>委托试验参数</th>
-            <td colspan="5">${editableText(data.sample.params, true)}</td>
+            <td colspan="5"><span class="editable-print multiline trial-params-print" contenteditable="true">${escapeHtml(data.sample.params || '')}</span></td>
           </tr>
           <tr>
             <th>建议依据标准</th>
-            <td colspan="3">${editableText(data.sample.standard, true)}</td>
+            <td colspan="3"><span class="editable-print multiline trial-standard-print" contenteditable="true">${escapeHtml(data.sample.standard || '')}</span></td>
             <th>判定依据</th>
             <td>${editableText(data.sample.judge)}</td>
           </tr>
@@ -1061,27 +2262,27 @@ function renderEntrustSheet(data) {
             <th>试验类别</th>
             <td colspan="5" class="trial-cell">
               <div class="trial-types">
-                ${trialCheckbox('土（TG）')}
+                ${trialCheckbox('土（TGJ）')}
                 ${trialCheckbox('粗集料（CJL）')}
                 ${trialCheckbox('细集料（XJL）')}
                 ${trialCheckbox('填料（TLJ）')}
                 ${trialCheckbox('岩石（YSJ）')}
                 ${trialCheckbox('水泥（SNJ）')}
                 ${trialCheckbox('水泥混凝土（TYH）')}
-                ${trialCheckbox('砂浆（SHJ）')}
+                ${trialCheckbox('砂浆（SYH）')}
                 ${trialCheckbox('外加剂（WJJ）')}
-                ${trialCheckbox('水（SY）')}
+                ${trialCheckbox('水（SYJ）')}
                 ${trialCheckbox('掺和料（CHL）')}
                 ${trialCheckbox('无机结合料（WJL）', true)}
                 ${trialCheckbox('石灰（SHJ）')}
                 ${trialCheckbox('沥青（LQT）')}
                 ${trialCheckbox('沥青混合料（LQL）')}
-                ${trialCheckbox('钢材与连接接头（GJT）')}
+                ${trialCheckbox('钢材与连接接头（GJJ）')}
                 ${trialCheckbox('路基路面（XCJ）')}
-                ${trialCheckbox('灌浆材料（JGT）')}
+                ${trialCheckbox('混凝土结构（JGT）')}
                 ${trialCheckbox('基桩、地基与基桩（CZL）')}
-                ${trialCheckbox('水泥混凝土拌合物（THB）')}
-                ${trialCheckbox('交通安全设施（JAT）')}
+                ${trialCheckbox('水泥混凝土拌合物（TBH）')}
+                ${trialCheckbox('交通安全设施（JAJ）')}
                 ${trialCheckbox('其它（QT）')}
                 ${trialCheckbox('矿料级配合比（KPB）')}
                 ${trialCheckbox('水泥混凝土配合比（TPB）')}
@@ -1110,19 +2311,19 @@ function renderEntrustSheet(data) {
           <tr>
             <th class="vertical" rowspan="5">接样人填写</th>
             <th>样品外观检查</th>
-            <td colspan="5">对送样人的样品外观描述进行确认：<span class="check checked"></span>认同 <span class="check"></span>不认同 <span class="paper-line"></span></td>
+            <td colspan="5">对送样人的样品外观描述进行确认：<span class="check" data-check-group="appearance"></span>认同 <span class="check" data-check-group="appearance"></span>不认同 <span class="paper-line"></span></td>
           </tr>
           <tr>
             <th>接样日期</th>
-            <td colspan="2">${editableText(data.receiveDate)}</td>
+            <td colspan="2">${editableText('')}</td>
             <th>计划完成日期</th>
             <td colspan="2">${editableText(data.finishDate)}</td>
           </tr>
           <tr>
             <th>接样人（签字）</th>
-            <td colspan="2">${editableText(data.receiver)}</td>
+            <td colspan="2">${editableText('')}</td>
             <th>结算方式</th>
-            <td colspan="2"><span class="check ${data.payType === '现金' ? 'checked' : ''}"></span>现金 <span class="check ${data.payType === '转账' ? 'checked' : ''}"></span>转账</td>
+            <td colspan="2"><span class="check" data-check-group="payment"></span>现金 <span class="check" data-check-group="payment"></span>转账</td>
           </tr>
           <tr>
             <th>费用总额（元）</th>
@@ -1205,11 +2406,11 @@ function renderTaskSheet(data) {
           </tr>
           <tr>
             <th>下达人</th>
-            <td>${editableText(data.sender)}</td>
+            <td>${editableText(data.receiver)}</td>
             <th>日期</th>
             <td class="task-date-cell">${editableText(data.receiveDate)}</td>
             <th>接受人</th>
-            <td>${editableText(data.receiver)}</td>
+            <td>${editableText('')}</td>
             <th>日期</th>
             <td class="task-date-cell">${editableText('')}</td>
           </tr>
@@ -1239,12 +2440,330 @@ function renderTaskSheet(data) {
 }
 
 function trialCheckbox(label, checked = false) {
+  const name = label.replace(/（[^）]*）/g, '').replace(/\([^)]*\)/g, '').trim();
+  const countControl = name === '粗集料' ? `
+      <select class="trial-count" data-trial-count="粗集料" aria-label="粗集料重复数量">
+        ${Array.from({ length: 6 }, (_, index) => `<option value="${index + 1}">${index + 1}</option>`).join('')}
+      </select>
+    ` : '';
   return `
     <label class="trial-check">
       <span>${escapeHtml(label)}</span>
-      <input type="checkbox" ${checked ? 'checked' : ''}>
+      <input type="checkbox" data-trial-name="${escapeHtml(name)}" ${checked ? 'checked' : ''}>
+      ${countControl}
     </label>
   `;
+}
+
+function getTrialCategorySummary(data) {
+  const selected = data.trialTypes?.length ? data.trialTypes : ['无机结合料'];
+  const names = selected.map((name) => TRIAL_DISPLAY_NAMES[name] || name);
+  return names.length === 1 ? names[0] : names.map((name, index) => `${index + 1}、${name}`).join('，');
+}
+
+const TRIAL_DISPLAY_NAMES = {
+  '水泥混凝土': '水泥混凝土试件'
+};
+
+const TRIAL_FIELD_DEFAULTS = {
+  '粗集料': { quantity: '150kg', appearance: '粗集料青灰色、干燥、无杂物' },
+  '细集料': { quantity: '150kg', appearance: '细集料青灰色、洁净、无杂质' },
+  '水泥': { quantity: '50kg', appearance: '水泥袋装、灰色、干燥无结团' },
+  '水泥混凝土': { quantity: '3块/1组', appearance: '正方体、完整、无缺陷' },
+  '外加剂': { quantity: '20kg', appearance: '外加剂液态，无沉淀物' },
+  '掺和料': { quantity: '30kg', appearance: '' }
+};
+
+function getSelectedTrialNames() {
+  return Array.from(els.formPrintArea.querySelectorAll('input[data-trial-name]:checked'))
+    .flatMap((input) => {
+      const name = input.dataset.trialName;
+      const count = name === '粗集料'
+        ? Number(els.formPrintArea.querySelector('[data-trial-count="粗集料"]')?.value || 1)
+        : 1;
+      return Array.from({ length: count }, () => name);
+    });
+}
+
+function getTrialFieldSummary(data, field) {
+  const selected = data.trialTypes?.length ? data.trialTypes : getSelectedTrialNames();
+  if (!selected.length) return data.sample[field] || '';
+  const values = selected.map((name) => {
+    const value = state.trialDetails[name]?.[field] ?? TRIAL_FIELD_DEFAULTS[name]?.[field] ?? data.sample[field] ?? '';
+    if (field !== 'quantity' || !value) return value;
+    return name === '水泥混凝土' ? value : `${name}${value}`;
+  });
+  return values.length === 1 ? values[0] : values.map((value, index) => `${index + 1}、${value}`).join('  ');
+}
+
+function getTrialSpecSummary(data) {
+  const selected = data.trialTypes?.length ? data.trialTypes : getSelectedTrialNames();
+  const values = selected.map((name) => state.trialDetails[name]?.spec).filter(Boolean);
+  return values.length <= 1 ? values[0] || '' : values.map((value, index) => `${index + 1}、${value}`).join('  ');
+}
+
+function getTrialConfigValue(name, field, fallback) {
+  return state.trialDetails[name]?.[field] || fallback;
+}
+
+function handleTrialTypeChange(event) {
+  if (!event.target.matches('input[data-trial-name], select[data-trial-count]')) return;
+  if (event.target.matches('select[data-trial-count]')) {
+    updateTrialTypeSummaries();
+    return;
+  }
+  const name = event.target.dataset.trialName;
+  if (event.target.checked && TRIAL_FIELD_DEFAULTS[name]) {
+    if (name === '粗集料' || name === '细集料') {
+      event.target.checked = false;
+      openAggregateSelectionDialog(name);
+      return;
+    }
+    const preset = TRIAL_FIELD_DEFAULTS[name];
+    const quantity = window.prompt(`请输入${name}的来样数量/组数`, state.trialDetails[name]?.quantity || preset.quantity);
+    if (quantity === null) {
+      event.target.checked = false;
+      return;
+    }
+    state.trialDetails[name] = { ...preset, quantity: quantity.trim() || preset.quantity };
+    if (name === '水泥') {
+      event.target.checked = false;
+      openCementSelectionDialog();
+      return;
+    }
+    if (ORIGIN_TRIAL_NAMES.has(name)) {
+      openOriginSelectionDialog();
+      return;
+    }
+  }
+  if (event.target.checked && ORIGIN_TRIAL_NAMES.has(name)) {
+    openOriginSelectionDialog();
+    return;
+  }
+  updateTrialTypeSummaries();
+}
+
+function updateTrialTypeSummaries() {
+  const selected = getSelectedTrialNames();
+  const target = els.formPrintArea.querySelector('.sample-name-print');
+  if (target) target.textContent = getTrialCategorySummary({ trialTypes: selected });
+  const quantityTarget = els.formPrintArea.querySelector('.sample-quantity-print');
+  if (quantityTarget) quantityTarget.textContent = getTrialFieldSummary({ sample: { quantity: '' }, trialTypes: selected }, 'quantity');
+  const appearanceTarget = els.formPrintArea.querySelector('.sample-appearance-print');
+  if (appearanceTarget) appearanceTarget.textContent = getTrialFieldSummary({ sample: { appearance: '' }, trialTypes: selected }, 'appearance');
+  const specTarget = els.formPrintArea.querySelector('.trial-spec-print');
+  if (specTarget) specTarget.textContent = getTrialSpecSummary({ trialTypes: selected });
+  const standardTarget = els.formPrintArea.querySelector('.trial-standard-print');
+  const paramsTarget = els.formPrintArea.querySelector('.trial-params-print');
+  if (standardTarget && getCombinedTrialStandards()) standardTarget.textContent = getCombinedTrialStandards();
+  if (paramsTarget && getCombinedTrialParams()) paramsTarget.textContent = getCombinedTrialParams();
+  const originTarget = els.formPrintArea.querySelector('.trial-origin-print');
+  if (originTarget) originTarget.textContent = getTrialOriginSummary();
+}
+
+const ORIGIN_TRIAL_NAMES = new Set(['细集料', '粗集料', '水泥', '外加剂', '填料', '沥青', '石灰', '钢材与连接接头']);
+
+function getTrialOriginSummary() {
+  if (!els.formPrintArea) return '';
+  const names = getSelectedTrialNames().filter((name) => ORIGIN_TRIAL_NAMES.has(name));
+  const values = names.map((name) => {
+    const origin = state.trialDetails[name]?.origin || '';
+    return origin ? `${name}：${origin}` : '';
+  }).filter(Boolean);
+  return values.length <= 1 ? values[0] || '' : values.map((value, index) => `${index + 1}、${value}`).join('  ');
+}
+
+async function openOriginSelectionDialog() {
+  const names = [...new Set(getSelectedTrialNames())].filter((name) => ORIGIN_TRIAL_NAMES.has(name));
+  if (!names.length) return;
+  await loadSampleOrigins();
+  document.getElementById('originSelectionDialog')?.remove();
+  const dialog = document.createElement('div');
+  dialog.id = 'originSelectionDialog';
+  dialog.className = 'selection-dialog-backdrop';
+  dialog.innerHTML = `
+    <section class="selection-dialog origin-dialog" role="dialog" aria-modal="true">
+      <header><strong>确认样品产地</strong><button type="button" data-origin-action="close">×</button></header>
+      <div class="origin-fields">
+        ${names.map((name) => `<label><strong>${escapeHtml(name)}</strong><input data-origin-name="${escapeHtml(name)}" list="origin-options-${escapeHtml(name)}" value="${escapeHtml(state.trialDetails[name]?.origin || '')}" placeholder="请输入${escapeHtml(name)}产地"><datalist id="origin-options-${escapeHtml(name)}">${(state.sampleOrigins[name] || []).map((origin) => `<option value="${escapeHtml(origin)}"></option>`).join('')}</datalist></label>`).join('')}
+      </div>
+      <footer><span class="muted">输入内容会自动保存到当前委托单</span><button type="button" class="mini" data-origin-action="close">完成</button></footer>
+    </section>`;
+  document.body.appendChild(dialog);
+  dialog.addEventListener('input', (event) => {
+    const input = event.target.closest('[data-origin-name]');
+    if (!input) return;
+    const name = input.dataset.originName;
+    state.trialDetails[name] = { ...(state.trialDetails[name] || {}), origin: input.value };
+    const target = els.formPrintArea.querySelector('.trial-origin-print');
+    if (target) target.textContent = getTrialOriginSummary();
+  });
+  dialog.addEventListener('change', async (event) => {
+    const input = event.target.closest('[data-origin-name]');
+    if (!input || !input.value.trim()) return;
+    const name = input.dataset.originName;
+    state.trialDetails[name] = { ...(state.trialDetails[name] || {}), origin: input.value.trim() };
+    try {
+      await api('/api/sample-origins', { method: 'POST', body: { sampleName: name, origin: input.value.trim() } });
+      state.sampleOrigins[name] = [...new Set([...(state.sampleOrigins[name] || []), input.value.trim()])].sort();
+    } catch (error) {
+      showError(error);
+    }
+  });
+  dialog.addEventListener('click', (event) => {
+    if (event.target.closest('[data-origin-action="close"]')) dialog.remove();
+  });
+}
+
+async function loadSampleOrigins() {
+  try {
+    const data = await api('/api/sample-origins');
+    state.sampleOrigins = (data.origins || []).reduce((result, item) => {
+      result[item.sampleName] = result[item.sampleName] || [];
+      result[item.sampleName].push(item.origin);
+      return result;
+    }, {});
+  } catch (error) {
+    // 产地历史读取失败时仍允许手工填写当前表单。
+  }
+}
+
+const CEMENT_OPTIONS = [
+  { standard: 'GB/T 1346-2024', title: '水泥标准稠度用水量、凝结时间、安定性试验', params: ['标准稠度用水量（基准法）', '标准稠度用水量（代用法）', '凝结时间（标准法）', '凝结时间（代用法）', '安定性（标准法）', '安定性（代用法）'], quantity: '1', unit: '组' },
+  { standard: 'GB/T 17671-2021', title: '水泥胶砂强度试验（ISO法）', params: ['抗压强度', '抗折强度'], quantity: '1', unit: '组' },
+  { standard: 'GB/T 176-2025', title: '水泥氯离子含量试验（硫氰酸铵容量法）', params: ['水泥氯离子含量试验（滴定法）', '水泥氯离子含量试验（电位滴定法）'], quantity: '50', unit: 'kg' },
+  { standard: 'GB/T 1345-2026', title: '水泥细度试验（筛析法）', params: ['水泥细度试验（筛析法）'], quantity: '50', unit: 'kg' },
+  { standard: 'JTG 3420-2020', title: '公路工程水泥及水泥混凝土试验相关项目', params: ['水泥细度试验', '水泥标准稠度用水量、凝结时间、安定性试验', '水泥胶砂强度试验（ISO法）', '碱含量试验（火焰光度法）'], quantity: '50', unit: 'kg' }
+];
+
+const AGGREGATE_OPTIONS = {
+  '粗集料': [
+    { standard: 'JTG 3432-2024', title: '粗集料常用试验', params: ['粗集料筛分试验（水洗法）', '粗集料密度及吸水率试验（容量瓶法）', '粗集料堆积密度及空隙率试验', '粗集料含泥量及泥块含量试验', '粗集料针、片状颗粒含量试验（规准仪法）', '粗集料针、片状颗粒含量试验（卡尺法）', '粗集料压碎值试验'], quantity: '150', unit: 'kg' },
+    { standard: 'JTG 3410-2025', title: '沥青与粗集料黏附性试验（水煮法）', params: ['沥青与粗集料黏附性试验（水煮法）'], quantity: '150', unit: 'kg' }
+  ],
+  '细集料': [
+    { standard: 'JTG 3432-2024', title: '细集料常用试验', params: ['细集料筛分试验（水洗法）', '细集料表观密度试验（容量瓶法）', '细集料堆积密度及空隙率试验', '细集料含泥量及泥块含量试验'], quantity: '150', unit: 'kg' },
+    { standard: 'JTG 3432-2024', title: '细集料含水率试验', params: ['细集料含水率试验（烘干法）'], quantity: '150', unit: 'kg' }
+  ]
+};
+
+const AGGREGATE_SPECS = {
+  '细集料': ['(0-4.75)', '(0-5)'],
+  '粗集料': ['(5-10)', '(10-20)', '(10-30)']
+};
+
+function openAggregateSelectionDialog(name) {
+  const id = 'aggregateSelectionDialog';
+  document.getElementById(id)?.remove();
+  const options = AGGREGATE_OPTIONS[name] || [];
+  const dialog = document.createElement('div');
+  dialog.id = id;
+  dialog.className = 'selection-dialog-backdrop';
+  dialog.innerHTML = `
+    <section class="selection-dialog" role="dialog" aria-modal="true">
+      <header><strong>${escapeHtml(name)}标准、数量和试验参数</strong><button type="button" data-aggregate-action="close">×</button></header>
+      <div class="cement-options">
+        <label class="aggregate-quantity">来样数量 <input data-aggregate-quantity value="150"> 单位 <input data-aggregate-unit value="kg"></label>
+        <label class="aggregate-spec">规格或型号 <select data-aggregate-spec><option value="">请选择</option>${(AGGREGATE_SPECS[name] || []).map((spec) => `<option value="${escapeHtml(spec)}" ${state.trialDetails[name]?.spec === spec ? 'selected' : ''}>${escapeHtml(spec)}</option>`).join('')}</select></label>
+        ${options.map((item, index) => `<article class="cement-option">
+          <h4><label><input type="checkbox" data-aggregate-standard value="${escapeHtml(item.standard)}"> ${escapeHtml(item.standard)}</label></h4>
+          <div class="cement-title">${escapeHtml(item.title)}</div>
+          <div class="cement-params">${item.params.map((param) => `<label><input type="checkbox" data-aggregate-param value="${escapeHtml(param)}">${escapeHtml(param)}</label>`).join('')}</div>
+        </article>`).join('')}
+      </div>
+      <footer><button type="button" class="mini" data-aggregate-action="close">取消</button><button type="button" class="mini primary" data-aggregate-action="confirm" data-aggregate-name="${escapeHtml(name)}">确定</button></footer>
+    </section>`;
+  document.body.appendChild(dialog);
+  dialog.addEventListener('click', (event) => {
+    const action = event.target.closest('[data-aggregate-action]')?.dataset.aggregateAction;
+    if (action === 'close') dialog.remove();
+    if (action === 'confirm') confirmAggregateSelection(dialog, name);
+  });
+}
+
+function confirmAggregateSelection(dialog, name) {
+  const standards = Array.from(dialog.querySelectorAll('[data-aggregate-standard]:checked')).map((input) => input.value);
+  const params = Array.from(dialog.querySelectorAll('[data-aggregate-param]:checked')).map((input) => input.value);
+  const quantity = `${dialog.querySelector('[data-aggregate-quantity]')?.value.trim() || '150'}${dialog.querySelector('[data-aggregate-unit]')?.value.trim() || 'kg'}`;
+  const spec = dialog.querySelector('[data-aggregate-spec]')?.value || '';
+  state.trialDetails[name] = { ...TRIAL_FIELD_DEFAULTS[name], quantity, spec, standard: standards.join('、'), params: params.join('、') };
+  const input = els.formPrintArea.querySelector(`input[data-trial-name="${name}"]`);
+  if (input) input.checked = true;
+  dialog.remove();
+  updateTrialTypeSummaries();
+  openOriginSelectionDialog();
+  els.formPrintArea.querySelector('.trial-standard-print').textContent = getCombinedTrialStandards();
+  els.formPrintArea.querySelector('.trial-params-print').textContent = getCombinedTrialParams();
+}
+
+function getCombinedTrialStandards() {
+  return [...new Set(getSelectedTrialNames().map((name) => state.trialDetails[name]?.standard).filter(Boolean))][0] || '';
+}
+
+function getCombinedTrialParams() {
+  const values = getSelectedTrialNames().map((name) => state.trialDetails[name]?.params).filter(Boolean);
+  return values.length <= 1 ? values[0] || '' : values.map((value, index) => `${index + 1}、${value}`).join('  ');
+}
+
+function openCementSelectionDialog() {
+  const existing = document.getElementById('cementSelectionDialog');
+  if (existing) existing.remove();
+  const dialog = document.createElement('div');
+  dialog.id = 'cementSelectionDialog';
+  dialog.className = 'selection-dialog-backdrop';
+  dialog.innerHTML = `
+    <section class="selection-dialog" role="dialog" aria-modal="true" aria-labelledby="cementDialogTitle">
+      <header><strong id="cementDialogTitle">水泥标准、数量和试验参数</strong><button type="button" data-cement-action="close">×</button></header>
+      <div class="cement-options">
+        ${CEMENT_OPTIONS.map((item, index) => `
+          <article class="cement-option">
+            <h4><label><input type="checkbox" data-cement-standard value="${index}" ${index === 0 ? 'checked' : ''}> ${item.standard}</label></h4>
+            <div class="cement-title">${escapeHtml(item.title)}</div>
+            <label class="cement-quantity">数量 <input data-cement-quantity value="${escapeHtml(item.quantity)}"> 单位 <input data-cement-unit value="${escapeHtml(item.unit)}"></label>
+            <div class="cement-params">${item.params.map((param, paramIndex) => `<label><input type="checkbox" data-cement-param value="${escapeHtml(param)}" ${paramIndex === 0 ? 'checked' : ''}>${escapeHtml(param)}</label>`).join('')}</div>
+          </article>
+        `).join('')}
+      </div>
+      <footer><button type="button" class="mini" data-cement-action="close">取消</button><button type="button" class="mini primary" data-cement-action="confirm">确定</button></footer>
+    </section>`;
+  document.body.appendChild(dialog);
+  dialog.addEventListener('click', handleCementDialogClick);
+}
+
+function handleCementDialogClick(event) {
+  const action = event.target.closest('[data-cement-action]')?.dataset.cementAction;
+  if (action === 'close') {
+    document.getElementById('cementSelectionDialog')?.remove();
+    updateTrialTypeSummaries();
+    return;
+  }
+  if (action !== 'confirm') return;
+  const dialog = document.getElementById('cementSelectionDialog');
+  const cards = Array.from(dialog?.querySelectorAll('.cement-option') || []).filter((card) => card.querySelector('[data-cement-standard]:checked'));
+  if (!cards.length) return;
+  const standards = cards.map((card) => CEMENT_OPTIONS[Number(card.querySelector('[data-cement-standard]').value)].standard);
+  const params = cards.flatMap((card) => Array.from(card.querySelectorAll('[data-cement-param]:checked')).map((input) => input.value));
+  const firstCard = cards[0];
+  const quantity = `${firstCard.querySelector('[data-cement-quantity]')?.value.trim() || '50'}${firstCard.querySelector('[data-cement-unit]')?.value.trim() || 'kg'}`;
+  state.trialDetails['水泥'] = { ...TRIAL_FIELD_DEFAULTS['水泥'], quantity, standard: standards.join('、'), params: [...new Set(params)].join('、') };
+  const cementInput = els.formPrintArea.querySelector('input[data-trial-name="水泥"]');
+  if (cementInput) cementInput.checked = true;
+  dialog.remove();
+  updateTrialTypeSummaries();
+  openOriginSelectionDialog();
+  const standardTarget = els.formPrintArea.querySelector('.trial-standard-print');
+  const paramsTarget = els.formPrintArea.querySelector('.trial-params-print');
+  if (standardTarget) standardTarget.textContent = standards[0];
+  if (paramsTarget) paramsTarget.textContent = [...new Set(params)].join('、');
+}
+
+function handlePrintCheckClick(event) {
+  const check = event.target.closest('.check[data-check-group]');
+  if (!check || !els.formPrintArea.contains(check)) return;
+  const group = check.dataset.checkGroup;
+  els.formPrintArea.querySelectorAll(`.check[data-check-group="${group}"]`).forEach((item) => {
+    item.classList.toggle('checked', item === check);
+  });
 }
 
 function editableText(value, multiline = false) {
@@ -2655,13 +4174,15 @@ function refreshAdminOptions() {
   els.reportSelect.innerHTML = '<option value="">新增报告</option>' +
     state.reports.map((report) => `<option value="${report.id}">${escapeHtml(report.name)}</option>`).join('');
 
-  els.reportTemplateTypeSelect.value = state.selectedTemplateType;
-  els.categoryTemplateTypeSelect.value = state.selectedTemplateType;
-  els.bulkTemplateTypeSelect.value = state.selectedTemplateType;
+  const templateFormType = state.selectedTemplateType === 'video' ? 'system' : state.selectedTemplateType;
+  els.reportTemplateTypeSelect.value = templateFormType;
+  els.categoryTemplateTypeSelect.value = templateFormType;
+  els.bulkTemplateTypeSelect.value = templateFormType;
   updateReportCategoryOptions();
   updateBulkCategoryOptions();
   updateCategoryParentOptions();
   renderCategoryManageList();
+  renderVideoCategorySuggestions();
 }
 
 async function loadInactiveReports() {
@@ -2890,11 +4411,116 @@ function scopeOptions(selectedScope = 'all') {
     { id: 'entrust', label: '只看委托单/任务单' },
     { id: 'report', label: '只看检测报告' },
     { id: 'auxiliary', label: '只看辅助检测' },
-    { id: 'system', label: '只看管理体系' }
+    { id: 'system', label: '只看管理体系' },
+    { id: 'video', label: '只看检测视频' },
+    { id: 'project', label: '只看阜南南阳大道' }
   ];
   return scopes
     .map((scope) => `<option value="${scope.id}" ${scope.id === (selectedScope || 'all') ? 'selected' : ''}>${escapeHtml(scope.label)}</option>`)
     .join('');
+}
+
+async function handleVideoSubmit(event) {
+  event.preventDefault();
+  const id = Number(els.videoIdInput.value);
+  const body = {
+    title: els.videoTitleInput.value.trim(),
+    category: els.videoCategoryInput.value.trim(),
+    lecturer: els.videoLecturerInput.value.trim(),
+    fileName: els.videoFileNameInput.value.trim(),
+    remarks: els.videoRemarksInput.value.trim()
+  };
+
+  try {
+    if (id) {
+      await api(`/api/training-videos/${id}`, { method: 'PATCH', body });
+      notice('检测视频已保存');
+    } else {
+      await api('/api/training-videos', { method: 'POST', body });
+      notice('检测视频已新增');
+    }
+    resetVideoForm();
+    await loadData();
+  } catch (error) {
+    showError(error);
+  }
+}
+
+function resetVideoForm() {
+  els.videoForm.reset();
+  els.videoIdInput.value = '';
+  const selectedCategory = state.categories.find((item) => item.id === state.selectedCategoryId);
+  if (els.videoCategoryInput) {
+    els.videoCategoryInput.value = selectedCategory?.templateType === 'video' ? selectedCategory.name : '';
+  }
+}
+
+function renderVideoCategorySuggestions() {
+  if (!els.videoCategorySuggestions) return;
+  els.videoCategorySuggestions.innerHTML = state.categories
+    .filter((category) => category.templateType === 'video')
+    .map((category) => `<option value="${escapeAttribute(category.name)}"></option>`)
+    .join('');
+}
+
+function fillVideoForm(videoId) {
+  const video = state.videos.find((item) => item.id === videoId);
+  if (!video) return;
+  els.videoIdInput.value = video.id;
+  els.videoTitleInput.value = video.title || '';
+  els.videoCategoryInput.value = video.category || '';
+  els.videoLecturerInput.value = video.lecturer || '';
+  els.videoFileNameInput.value = video.fileName || '';
+  els.videoRemarksInput.value = video.remarks || '';
+}
+
+function renderVideoAdminList() {
+  if (!els.videoAdminList) return;
+  if (!canManageTemplates()) {
+    els.videoAdminList.innerHTML = '';
+    return;
+  }
+  if (!state.videos.length) {
+    els.videoAdminList.innerHTML = `<div class="empty compact">暂无检测视频。视频目录：${escapeHtml(state.videoDir || 'E:\\恒信通视频')}</div>`;
+    return;
+  }
+
+  els.videoAdminList.innerHTML = state.videos.map((video) => `
+    <div class="manage-row video-admin-row" data-video-row="${video.id}">
+      <div>
+        <strong>${escapeHtml(video.title)}</strong>
+        <div class="muted">${escapeHtml(video.category || '未分类')} / ${escapeHtml(video.fileName)}</div>
+      </div>
+      <span class="muted">${escapeHtml(video.lecturer || '暂无来源')}</span>
+      <button class="mini" data-action="edit-video-admin" type="button">编辑</button>
+      <button class="mini danger-btn" data-action="disable-video" type="button">停用</button>
+    </div>
+  `).join('');
+}
+
+async function handleVideoAdminClick(event) {
+  const button = event.target.closest('button[data-action]');
+  if (!button) return;
+  const row = button.closest('[data-video-row]');
+  if (!row) return;
+  const id = Number(row.dataset.videoRow);
+  const action = button.dataset.action;
+
+  if (action === 'edit-video-admin') {
+    fillVideoForm(id);
+    return;
+  }
+
+  if (action === 'disable-video') {
+    if (!confirm('确定停用这个检测视频吗？硬盘里的视频文件不会删除。')) return;
+    try {
+      await api(`/api/training-videos/${id}`, { method: 'PATCH', body: { active: false } });
+      notice('检测视频已停用');
+      await loadData();
+    } catch (error) {
+      showError(error);
+    }
+  }
 }
 
 async function loadUsers() {
@@ -3145,6 +4771,10 @@ function normalizeTemplateType(value) {
   if (value === 'entrust' || value === 'task') return 'entrust';
   if (value === 'auxiliary') return 'auxiliary';
   if (value === 'system') return 'system';
+  if (value === 'video') return 'video';
+  if (value === 'project') return 'project';
+  if (value === 'instrument') return 'instrument';
+  if (value === 'tool') return 'tool';
   return 'report';
 }
 

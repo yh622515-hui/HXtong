@@ -4,7 +4,7 @@
   <meta charset="utf-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>恒信通</title>
-  <link rel="stylesheet" href="/styles.css?v=20260605-print2">
+  <link rel="stylesheet" href="/styles.css?v=20261012-funan-spec-buttons1">
 </head>
 <body>
   <div id="loginView" class="login-page">
@@ -191,6 +191,45 @@
     </div>
   </div>
 
+  <div id="projectTaskModal" class="modal form-modal" hidden>
+    <div class="modal-panel form-panel">
+      <div class="modal-head no-print">
+        <div>
+          <h2 id="projectTaskTitle">阜南南阳大道 - 现场检测任务单</h2>
+          <div class="subline">台账信息已自动带入，确认无误后打印。</div>
+        </div>
+        <div class="modal-actions">
+          <button id="confirmProjectTaskBtn" class="primary" type="button">确认并打印</button>
+          <button id="closeProjectTaskBtn" class="icon-btn" type="button">×</button>
+        </div>
+      </div>
+      <div id="projectTaskControls" class="form-controls no-print"></div>
+      <div id="projectTaskPrintArea" class="form-print-area"></div>
+    </div>
+  </div>
+
+  <div id="videoModal" class="modal video-modal" hidden>
+    <div class="modal-panel video-panel">
+      <div class="modal-head">
+        <div>
+          <h2 id="videoTitle">检测视频</h2>
+          <div class="subline">局域网内播放，支持倍速和全屏。</div>
+        </div>
+        <button id="closeVideoBtn" class="icon-btn" type="button">×</button>
+      </div>
+      <div class="video-player-wrap">
+        <video id="trainingVideoPlayer" controls preload="metadata"></video>
+        <div class="speed-row" aria-label="播放速度">
+          <button class="mini" data-speed="0.75" type="button">0.75x</button>
+          <button class="mini active" data-speed="1" type="button">1x</button>
+          <button class="mini" data-speed="1.25" type="button">1.25x</button>
+          <button class="mini" data-speed="1.5" type="button">1.5x</button>
+          <button class="mini" data-speed="2" type="button">2x</button>
+        </div>
+      </div>
+    </div>
+  </div>
+
   <div id="adminModal" class="modal" hidden>
     <div class="modal-panel">
       <div class="modal-head">
@@ -205,6 +244,7 @@
         <button class="admin-tab active" data-admin-tab="upload" type="button">上传模板</button>
         <button class="admin-tab" data-admin-tab="bulk" type="button">批量导入</button>
         <button class="admin-tab" data-admin-tab="categories" type="button">分类管理</button>
+        <button class="admin-tab" data-admin-tab="videos" type="button">检测视频</button>
         <button class="admin-tab super-only" data-admin-tab="users" type="button">用户管理</button>
         <button class="admin-tab" data-admin-tab="safety" type="button">安全维护</button>
         <button class="admin-tab" data-admin-tab="inactive" type="button">停用模板</button>
@@ -232,6 +272,7 @@
                 <option value="report">检测报告模板</option>
                 <option value="auxiliary">辅助检测</option>
                 <option value="system">管理体系</option>
+                <option value="tool">常用工具</option>
               </select>
             </label>
             <label>
@@ -269,6 +310,7 @@
                 <option value="report">检测报告模板</option>
                 <option value="auxiliary">辅助检测</option>
                 <option value="system">管理体系</option>
+                <option value="tool">常用工具</option>
               </select>
             </label>
             <label>
@@ -298,11 +340,46 @@
               <option value="report">检测报告模板</option>
               <option value="auxiliary">辅助检测</option>
               <option value="system">管理体系</option>
+              <option value="tool">常用工具</option>
             </select>
             <select name="parentId" id="categoryParentSelect"></select>
             <button class="primary" type="submit">新增</button>
           </form>
           <div id="categoryList" class="manage-list"></div>
+        </section>
+
+        <section class="admin-section admin-page" data-admin-page="videos" hidden>
+          <h3>检测视频</h3>
+          <div class="section-help">视频文件先放到 E:\恒信通视频，再在这里登记文件名。支持子文件夹，例如：标准宣贯\课程1.mp4。</div>
+          <form id="videoForm" class="stack compact-form">
+            <input name="videoId" id="videoIdInput" type="hidden">
+            <label>
+              课程名称
+              <input name="title" id="videoTitleInput" required>
+            </label>
+            <label>
+              课程分类
+              <input name="category" id="videoCategoryInput" list="videoCategorySuggestions" placeholder="例如：道路工程、桥梁隧道">
+              <datalist id="videoCategorySuggestions"></datalist>
+            </label>
+            <label>
+              讲师/来源
+              <input name="lecturer" id="videoLecturerInput" placeholder="可不填">
+            </label>
+            <label>
+              视频文件名
+              <input name="fileName" id="videoFileNameInput" placeholder="例如：标准宣贯\课程1.mp4" required>
+            </label>
+            <label>
+              备注
+              <textarea name="remarks" id="videoRemarksInput" rows="3"></textarea>
+            </label>
+            <div class="form-actions">
+              <button class="primary" type="submit">保存视频</button>
+              <button id="resetVideoFormBtn" class="ghost" type="button">清空</button>
+            </div>
+          </form>
+          <div id="videoAdminList" class="manage-list"></div>
         </section>
 
         <section class="admin-section admin-page super-only" data-admin-page="users" hidden>
@@ -321,7 +398,9 @@
               <option value="all">可看全部</option>
               <option value="entrust">只看委托单/任务单</option>
               <option value="report">只看检测报告</option>
+              <option value="auxiliary">只看辅助检测</option>
               <option value="system">只看管理体系</option>
+              <option value="video">只看检测视频</option>
             </select>
             <button class="primary" type="submit">新增用户</button>
           </form>
@@ -354,6 +433,6 @@
   </div>
 
   <div id="toast" class="toast" hidden></div>
-  <script src="/app.js?v=20260605-print2"></script>
+  <script src="/app.js?v=20261012-funan-spec-buttons1"></script>
 </body>
 </html>

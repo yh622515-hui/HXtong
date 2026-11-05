@@ -1,0 +1,293 @@
+<!doctype html>
+<html lang="zh-CN">
+<head>
+  <meta charset="utf-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>一单一库标准查新</title>
+  <script src="/vendor/xlsx.full.min.js"></script>
+  <style>
+    :root { color: #172b3a; background: #eef5f3; font-family: "Microsoft YaHei", Arial, sans-serif; }
+    * { box-sizing: border-box; }
+    body { margin: 0; min-width: 320px; }
+    header { background: #126b5d; color: #fff; padding: 18px 28px; }
+    header a { color: #d9f1eb; text-decoration: none; font-size: 14px; }
+    h1 { margin: 5px 0 0; font-size: 23px; }
+    main { max-width: 1200px; margin: 26px auto; padding: 0 20px 48px; }
+    .panel { background: #fff; border: 1px solid #d7e4e0; padding: 24px; margin-bottom: 18px; }
+    .panel h2 { margin: 0 0 8px; font-size: 18px; }
+    .note { color: #62737d; line-height: 1.7; font-size: 14px; }
+    .controls { display: grid; grid-template-columns: minmax(260px, 1fr) 180px 180px auto; gap: 14px; align-items: end; margin-top: 18px; }
+    label { display: grid; gap: 7px; font-size: 14px; color: #3d5059; }
+    input, select, button { min-height: 38px; font: inherit; }
+    input, select { border: 1px solid #b9ccc6; background: #fff; padding: 7px 9px; }
+    button { border: 1px solid #126b5d; background: #126b5d; color: #fff; padding: 8px 16px; cursor: pointer; }
+    button:disabled { cursor: not-allowed; opacity: .55; }
+    button.secondary { border-color: #78908a; background: #fff; color: #234b42; }
+    .file-line { margin: 15px 0 0; color: #49625a; font-size: 14px; }
+    .upload-row { display: flex; gap: 12px; align-items: center; flex-wrap: wrap; margin-top: 18px; padding-top: 16px; border-top: 1px solid #e3ece9; }
+    .upload-row input { max-width: 360px; }
+    .upload-list { margin: 10px 0 0; padding-left: 20px; color: #49625a; font-size: 14px; }
+    .summary { display: grid; grid-template-columns: repeat(3, minmax(0, 1fr)); gap: 12px; margin: 18px 0; }
+    .summary div { padding: 14px; border-left: 4px solid #126b5d; background: #f4faf8; }
+    .summary strong { display: block; margin-top: 5px; font-size: 22px; }
+    .table-wrap { overflow: auto; border: 1px solid #d8e2df; max-height: 540px; }
+    table { width: 100%; border-collapse: collapse; min-width: 760px; font-size: 14px; }
+    th, td { padding: 10px 12px; text-align: left; border-bottom: 1px solid #e3ece9; vertical-align: top; }
+    th { position: sticky; top: 0; background: #f1f7f5; z-index: 1; }
+    .yes { color: #087c4e; font-weight: 700; }
+    .no { color: #b23c30; font-weight: 700; }
+    .actions { display: flex; gap: 10px; flex-wrap: wrap; margin-top: 18px; }
+    #message { min-height: 22px; margin-top: 14px; color: #a52f26; font-size: 14px; }
+    #message.ok { color: #087c4e; }
+    @media (max-width: 800px) { .controls { grid-template-columns: 1fr; } .summary { grid-template-columns: 1fr; } }
+  </style>
+</head>
+<body>
+  <header>
+    <a href="/">返回恒信通</a>
+    <h1>一单一库标准查新</h1>
+  </header>
+  <main>
+    <section class="panel">
+      <h2>上传查新表</h2>
+      <p class="note">系统读取“一单一库查新”工作表的 C 列标准名称和编号，到网站“标准规范下载”资料库中核对。结果只写到导出的新文件，不会修改您电脑上的原表。<a href="/一单一库标准查新模板.xls">下载公司查新模板</a></p>
+      <div class="controls">
+        <label>查新 Excel 文件
+          <input id="excelFile" type="file" accept=".xls,.xlsx,.xlsm">
+        </label>
+        <label>查新日期
+          <input id="reviewDate" type="date">
+        </label>
+        <label>核查人
+          <input id="reviewer" maxlength="30" placeholder="填写姓名">
+        </label>
+        <button id="checkBtn" type="button" disabled>开始查新</button>
+      </div>
+      <div id="fileInfo" class="file-line">请先选择模板文件。</div>
+      <div class="upload-row">
+        <strong>保存查新表</strong>
+        <input id="uploadFile" type="file" accept=".xls,.xlsx,.xlsm">
+        <button id="uploadBtn" type="button">上传</button>
+      </div>
+      <ul id="uploadList" class="upload-list"><li>正在读取已上传文件...</li></ul>
+      <div id="message"></div>
+    </section>
+
+    <section id="resultPanel" class="panel" hidden>
+      <h2>查新结果</h2>
+      <p class="note">“在库”表示网站标准规范下载栏目已有匹配资料；“不在库”表示当前资料库中未找到。是否为最新有效版本需要人工复核，本工具不自动判断。</p>
+      <div class="summary">
+        <div>待核对<strong id="totalCount">0</strong></div>
+        <div>在库<strong id="inLibraryCount">0</strong></div>
+        <div>不在库<strong id="notInLibraryCount">0</strong></div>
+      </div>
+      <div class="table-wrap">
+        <table>
+          <thead><tr><th>行号</th><th>C 列标准名称及编号</th><th>查新结果</th><th>库内匹配资料</th></tr></thead>
+          <tbody id="resultRows"></tbody>
+        </table>
+      </div>
+      <div class="actions">
+        <button id="downloadBtn" type="button">下载查新结果 Excel</button>
+        <button id="resetBtn" class="secondary" type="button">重新选择文件</button>
+      </div>
+    </section>
+  </main>
+  <script>
+    const sourceColumn = 2;
+    const reviewColumns = [3, 6, 9, 12, 15, 18];
+    const state = { workbook: null, sheet: null, rows: [], targetColumn: null, library: [] };
+    const els = {
+      file: document.getElementById('excelFile'), fileInfo: document.getElementById('fileInfo'), check: document.getElementById('checkBtn'),
+      date: document.getElementById('reviewDate'), reviewer: document.getElementById('reviewer'), message: document.getElementById('message'),
+      panel: document.getElementById('resultPanel'), rows: document.getElementById('resultRows'), total: document.getElementById('totalCount'),
+      inLibrary: document.getElementById('inLibraryCount'), notInLibrary: document.getElementById('notInLibraryCount'),
+      download: document.getElementById('downloadBtn'), reset: document.getElementById('resetBtn')
+      , uploadFile: document.getElementById('uploadFile'), uploadBtn: document.getElementById('uploadBtn'), uploadList: document.getElementById('uploadList')
+    };
+
+    els.date.value = new Date().toISOString().slice(0, 10);
+    fetch('/api/me').then((r) => r.ok ? r.json() : null).then((data) => { if (data && data.user) els.reviewer.value = data.user.displayName || ''; });
+
+    async function loadUploadList() {
+      const response = await fetch('/api/standard-check/uploads');
+      if (!response.ok) return;
+      const data = await response.json();
+      els.uploadList.innerHTML = data.files.length
+        ? data.files.map((file) => `<li>${file.name}</li>`).join('')
+        : '<li>还没有保存的查新表。</li>';
+    }
+
+    els.uploadBtn.addEventListener('click', async () => {
+      const file = els.uploadFile.files[0];
+      if (!file) { showMessage('请先选择 Excel 查新文件。'); return; }
+      const form = new FormData();
+      form.append('file', file);
+      els.uploadBtn.disabled = true;
+      try {
+        const response = await fetch('/api/standard-check/uploads', { method: 'POST', body: form, credentials: 'same-origin' });
+        const data = await response.json().catch(() => ({}));
+        if (!response.ok) throw new Error(data.message || '上传失败');
+        showMessage(`已保存：${data.file.name}`, true);
+        els.uploadFile.value = '';
+        await loadUploadList();
+      } catch (error) { showMessage(error.message || '上传失败'); }
+      finally { els.uploadBtn.disabled = false; }
+    });
+    loadUploadList();
+
+    function showMessage(text, ok) {
+      els.message.textContent = text || '';
+      els.message.classList.toggle('ok', Boolean(ok));
+    }
+
+    function normalize(value) {
+      return String(value || '').toUpperCase().replace(/[\s　_／/\\()（）【】\[\]《》,，.．:：;；\-—–]/g, '');
+    }
+
+    function standardCodes(value) {
+      const normalized = String(value || '').toUpperCase().replace(/[＿_／]/g, '/');
+      const found = normalized.match(/(?:GB\/?T|GB|JTG|JT\/?T|JTT|JGJ|JJG|JJF|SL|CJJ|CECS|CNAS)[\s\-\/]*\d+(?:\.\d+)?(?:\s*[-—]\s*\d{2,4})?/g) || [];
+      return found.map(normalize).filter(Boolean);
+    }
+
+    function findTargetColumn(sheet, lastRow) {
+      for (const column of reviewColumns) {
+        let hasValue = false;
+        for (let row = 4; row <= lastRow; row += 1) {
+          const cell = sheet[XLSX.utils.encode_cell({ r: row, c: column })];
+          if (cell && String(cell.v || '').trim()) { hasValue = true; break; }
+        }
+        if (!hasValue) return column;
+      }
+      return null;
+    }
+
+    function columnLetter(column) { return XLSX.utils.encode_col(column); }
+
+    async function loadLibrary() {
+      const response = await fetch('/api/standard-library');
+      if (!response.ok) throw new Error('无法读取标准规范下载库，请先登录网站。');
+      const data = await response.json();
+      return data.standards || [];
+    }
+
+    function buildLibraryIndex(library) {
+      const codeIndex = new Map();
+      const textItems = [];
+      library.forEach((item) => {
+        const label = item.name || item.fileName || '';
+        standardCodes(`${item.name} ${item.fileName}`).forEach((code) => {
+          if (!codeIndex.has(code)) codeIndex.set(code, label);
+        });
+        textItems.push({ normalized: normalize(label), label });
+      });
+      return { codeIndex, textItems };
+    }
+
+    function matchStandard(source, index) {
+      const codes = standardCodes(source);
+      for (const code of codes) {
+        if (index.codeIndex.has(code)) return index.codeIndex.get(code);
+      }
+      const sourceText = normalize(source);
+      if (sourceText.length >= 8) {
+        const byName = index.textItems.find((item) => item.normalized.includes(sourceText) || sourceText.includes(item.normalized));
+        if (byName) return byName.label;
+      }
+      return '';
+    }
+
+    function renderResults() {
+      const inCount = state.rows.filter((row) => row.found).length;
+      els.total.textContent = state.rows.length;
+      els.inLibrary.textContent = inCount;
+      els.notInLibrary.textContent = state.rows.length - inCount;
+      els.rows.innerHTML = state.rows.map((row) => `
+        <tr>
+          <td>${row.rowNumber}</td>
+          <td>${escapeHtml(row.source)}</td>
+          <td class="${row.found ? 'yes' : 'no'}">${row.found ? '√ 在库' : '× 不在库'}</td>
+          <td>${escapeHtml(row.match || '-')}</td>
+        </tr>
+      `).join('');
+      els.panel.hidden = false;
+    }
+
+    function escapeHtml(value) {
+      return String(value || '').replace(/[&<>'"]/g, (char) => ({ '&': '&amp;', '<': '&lt;', '>': '&gt;', "'": '&#39;', '"': '&quot;' })[char]);
+    }
+
+    els.file.addEventListener('change', async () => {
+      const file = els.file.files[0];
+      state.workbook = null; state.sheet = null; state.rows = []; state.targetColumn = null; els.panel.hidden = true;
+      if (!file) { els.check.disabled = true; els.fileInfo.textContent = '请先选择模板文件。'; return; }
+      try {
+        showMessage('');
+        const data = await file.arrayBuffer();
+        const workbook = XLSX.read(data, { cellDates: true });
+        const sheetName = workbook.SheetNames.find((name) => name.includes('一单一库查新')) || workbook.SheetNames[0];
+        const sheet = workbook.Sheets[sheetName];
+        const range = XLSX.utils.decode_range(sheet['!ref'] || 'A1');
+        const targetColumn = findTargetColumn(sheet, range.e.r);
+        if (targetColumn === null) throw new Error('这份表的所有查新栏都已有内容，请先新增一组空白查新栏后再导入。');
+        state.workbook = workbook; state.sheet = sheet; state.targetColumn = targetColumn;
+        els.fileInfo.textContent = `已读取：${file.name}；将把本次结果写入 ${columnLetter(targetColumn)} 列。`;
+        els.check.disabled = false;
+      } catch (error) {
+        els.check.disabled = true;
+        showMessage(error.message || '文件读取失败。');
+      }
+    });
+
+    els.check.addEventListener('click', async () => {
+      if (!state.workbook || !state.sheet) return;
+      if (!els.reviewer.value.trim()) { showMessage('请填写核查人。'); return; }
+      try {
+        els.check.disabled = true;
+        els.check.textContent = '正在查新...';
+        showMessage('正在读取网站标准库，请稍候。');
+        state.library = await loadLibrary();
+        const index = buildLibraryIndex(state.library);
+        const range = XLSX.utils.decode_range(state.sheet['!ref'] || 'A1');
+        const rows = [];
+        for (let row = 4; row <= range.e.r; row += 1) {
+          const sourceCell = state.sheet[XLSX.utils.encode_cell({ r: row, c: sourceColumn })];
+          const source = String(sourceCell && sourceCell.v || '').trim();
+          if (!source) continue;
+          const match = matchStandard(source, index);
+          rows.push({ row, rowNumber: row + 1, source, found: Boolean(match), match });
+        }
+        state.rows = rows;
+        const dateText = els.date.value ? els.date.value.replaceAll('-', '.') : '';
+        const headerCell = XLSX.utils.encode_cell({ r: 2, c: state.targetColumn });
+        const header = dateText ? `查新时间：${dateText}\n核查人：${els.reviewer.value.trim()}` : `核查人：${els.reviewer.value.trim()}`;
+        state.sheet[headerCell] = { t: 's', v: header };
+        rows.forEach((row) => {
+          state.sheet[XLSX.utils.encode_cell({ r: row.row, c: state.targetColumn })] = { t: 's', v: row.found ? '√' : '×' };
+        });
+        renderResults();
+        showMessage(`查新完成：本次核对 ${rows.length} 条，标准库共 ${state.library.length} 条资料。`, true);
+      } catch (error) {
+        showMessage(error.message || '查新失败。');
+      } finally {
+        els.check.disabled = false;
+        els.check.textContent = '开始查新';
+      }
+    });
+
+    els.download.addEventListener('click', () => {
+      if (!state.workbook) return;
+      const data = XLSX.write(state.workbook, { bookType: 'xlsx', type: 'array' });
+      const blob = new Blob([data], { type: 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet' });
+      const link = document.createElement('a');
+      link.href = URL.createObjectURL(blob);
+      link.download = `一单一库查新结果_${new Date().toISOString().slice(0, 10)}.xlsx`;
+      link.click();
+      URL.revokeObjectURL(link.href);
+    });
+
+    els.reset.addEventListener('click', () => { els.file.value = ''; els.file.dispatchEvent(new Event('change')); showMessage(''); });
+  </script>
+</body>
+</html>

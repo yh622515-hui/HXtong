@@ -6,22 +6,26 @@ const path = require('node:path');
 const crypto = require('node:crypto');
 const { spawn } = require('node:child_process');
 const { DatabaseSync } = require('node:sqlite');
+const XLSX = require('xlsx');
 
 const ROOT_DIR = __dirname;
 const DATA_DIR = path.join(ROOT_DIR, 'data');
 const UPLOAD_DIR = path.join(ROOT_DIR, 'uploads');
+const STANDARD_CHECK_UPLOAD_DIR = path.join(UPLOAD_DIR, 'standard-check');
 const BACKUP_DIR = path.join(ROOT_DIR, 'backup');
 const PUBLIC_DIR = path.join(ROOT_DIR, 'public');
+const VIDEO_DIR = process.env.HXT_VIDEO_DIR || path.join(path.dirname(ROOT_DIR), '恒信通视频');
 const DB_PATH = path.join(DATA_DIR, 'hengxintong.db');
 const HOST = '0.0.0.0';
 const PORT = Number(process.env.PORT || 3000);
-const MAX_UPLOAD_BYTES = 80 * 1024 * 1024;
+const MAX_UPLOAD_BYTES = 300 * 1024 * 1024;
 const SESSION_MS = 8 * 60 * 60 * 1000;
-const TEMPLATE_TYPES = new Set(['report', 'entrust', 'auxiliary', 'system']);
+const VIDEO_STREAM_CHUNK_BYTES = 1024 * 1024;
+const TEMPLATE_TYPES = new Set(['report', 'entrust', 'auxiliary', 'system', 'video', 'project', 'instrument', 'tool']);
 const USER_ROLES = new Set(['user', 'admin', 'superadmin']);
-const USER_SCOPES = new Set(['all', 'report', 'entrust', 'auxiliary', 'system']);
+const USER_SCOPES = new Set(['all', 'report', 'entrust', 'auxiliary', 'system', 'video', 'project', 'instrument', 'tool']);
 
-for (const dir of [DATA_DIR, UPLOAD_DIR, BACKUP_DIR, PUBLIC_DIR]) {
+for (const dir of [DATA_DIR, UPLOAD_DIR, STANDARD_CHECK_UPLOAD_DIR, BACKUP_DIR, PUBLIC_DIR, VIDEO_DIR]) {
   fs.mkdirSync(dir, { recursive: true });
 }
 
@@ -147,6 +151,122 @@ function initDatabase() {
       created_by INTEGER REFERENCES users(id),
       created_at TEXT NOT NULL
     );
+
+    CREATE TABLE IF NOT EXISTS training_videos (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      title TEXT NOT NULL,
+      category TEXT NOT NULL DEFAULT '',
+      lecturer TEXT NOT NULL DEFAULT '',
+      file_name TEXT NOT NULL,
+      remarks TEXT NOT NULL DEFAULT '',
+      active INTEGER NOT NULL DEFAULT 1,
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS entrust_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      client_name TEXT NOT NULL,
+      project_name TEXT NOT NULL,
+      project_code TEXT NOT NULL,
+      entrust_year TEXT NOT NULL,
+      entrust_serial INTEGER NOT NULL,
+      entrust_no TEXT NOT NULL UNIQUE,
+      task_no TEXT NOT NULL UNIQUE,
+      sample_name TEXT NOT NULL,
+      sample_serial INTEGER NOT NULL,
+      sample_code TEXT NOT NULL DEFAULT '',
+      record_no TEXT NOT NULL DEFAULT '',
+      report_no TEXT NOT NULL DEFAULT '',
+      entrust_date TEXT NOT NULL,
+      receive_date TEXT NOT NULL,
+      receiver TEXT NOT NULL DEFAULT '李晓东',
+      sender TEXT NOT NULL DEFAULT '',
+      send_dept TEXT NOT NULL DEFAULT '综合部',
+      receive_dept TEXT NOT NULL DEFAULT '检测部',
+      usage TEXT NOT NULL DEFAULT '',
+      remark TEXT NOT NULL DEFAULT '',
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS funan_ledger_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entrust_no TEXT NOT NULL DEFAULT '',
+      task_no TEXT NOT NULL UNIQUE,
+      sample_no TEXT NOT NULL DEFAULT '',
+      quantity TEXT NOT NULL DEFAULT '',
+      treatment TEXT NOT NULL DEFAULT '',
+      usage TEXT NOT NULL DEFAULT '',
+      entrust_date TEXT NOT NULL DEFAULT '',
+      source_row INTEGER NOT NULL DEFAULT 0,
+      imported_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS funan_task_forms (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      ledger_id INTEGER NOT NULL UNIQUE REFERENCES funan_ledger_records(id) ON DELETE CASCADE,
+      client_name TEXT NOT NULL DEFAULT '安徽省新路建设工程集团有限责任公司',
+      project_name TEXT NOT NULL DEFAULT '南阳大道（阜南段）修复养护工程许城路项目',
+      sample_name TEXT NOT NULL DEFAULT '沥青混凝土',
+      sample_spec TEXT NOT NULL DEFAULT 'AC-13',
+      test_item TEXT NOT NULL DEFAULT '弯沉',
+      execution_standard TEXT NOT NULL DEFAULT 'JTG 3450-2019',
+      method TEXT NOT NULL DEFAULT 'JTG 3450-2019综合法',
+      record_no TEXT NOT NULL DEFAULT '',
+      report_no TEXT NOT NULL DEFAULT '',
+      send_dept TEXT NOT NULL DEFAULT '综合部',
+      receive_dept TEXT NOT NULL DEFAULT '检测部',
+      sender TEXT NOT NULL DEFAULT '李晓东',
+      status TEXT NOT NULL DEFAULT 'draft',
+      confirmed_by INTEGER REFERENCES users(id),
+      confirmed_at TEXT,
+      printed_by INTEGER REFERENCES users(id),
+      printed_at TEXT,
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS instrument_catalog (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      code TEXT NOT NULL,
+      parameters TEXT NOT NULL DEFAULT '',
+      category TEXT NOT NULL DEFAULT '',
+      source TEXT NOT NULL DEFAULT '',
+      UNIQUE(name, code)
+    );
+
+    CREATE TABLE IF NOT EXISTS instrument_usage_records (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      usage_date TEXT NOT NULL,
+      sample_no TEXT NOT NULL DEFAULT '',
+      test_parameters TEXT NOT NULL DEFAULT '',
+      instrument_name TEXT NOT NULL,
+      instrument_code TEXT NOT NULL,
+      start_time TEXT NOT NULL DEFAULT '',
+      end_time TEXT NOT NULL DEFAULT '',
+      user_name TEXT NOT NULL DEFAULT '',
+      before_status TEXT NOT NULL DEFAULT '正常',
+      after_status TEXT NOT NULL DEFAULT '正常',
+      remark TEXT NOT NULL DEFAULT '',
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL
+    );
+
+    CREATE TABLE IF NOT EXISTS sample_origins (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      sample_name TEXT NOT NULL,
+      origin TEXT NOT NULL,
+      created_by INTEGER REFERENCES users(id),
+      created_at TEXT NOT NULL,
+      updated_at TEXT NOT NULL,
+      UNIQUE(sample_name, origin)
+    );
   `);
 
   migrateDatabase();
@@ -205,10 +325,16 @@ function migrateDatabase() {
   migrateUserRoles();
   addColumnIfMissing('reports', 'excel_file_name', 'TEXT');
   addColumnIfMissing('reports', 'excel_original_name', 'TEXT');
+  addColumnIfMissing('reports', 'software_file_name', 'TEXT');
+  addColumnIfMissing('reports', 'software_original_name', 'TEXT');
   addColumnIfMissing('reports', 'template_type', "TEXT NOT NULL DEFAULT 'report'");
   addColumnIfMissing('categories', 'template_type', "TEXT NOT NULL DEFAULT 'report'");
   addColumnIfMissing('users', 'scope', "TEXT NOT NULL DEFAULT 'all'");
+  addColumnIfMissing('entrust_records', 'sample_code', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing('entrust_records', 'record_no', "TEXT NOT NULL DEFAULT ''");
+  addColumnIfMissing('entrust_records', 'report_no', "TEXT NOT NULL DEFAULT ''");
   mergeTaskTemplateTypes();
+  migrateTrainingVideoCategory();
   migrateRecordTableForExcel('upload_records', `
     CREATE TABLE upload_records_new (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -247,6 +373,32 @@ function migrateDatabase() {
 function mergeTaskTemplateTypes() {
   db.prepare("UPDATE reports SET template_type = 'entrust' WHERE template_type = 'task'").run();
   db.prepare("UPDATE categories SET template_type = 'entrust' WHERE template_type = 'task'").run();
+}
+
+function migrateTrainingVideoCategory() {
+  const existingVideoRoot = db.prepare(`
+    SELECT id FROM categories
+    WHERE template_type = 'video' AND parent_id IS NULL AND name = '检测视频'
+  `).get();
+  const systemVideo = db.prepare(`
+    SELECT id FROM categories
+    WHERE template_type = 'system' AND name = '检测视频'
+    ORDER BY parent_id IS NULL DESC, id
+    LIMIT 1
+  `).get();
+
+  if (existingVideoRoot) {
+    if (systemVideo) {
+      db.prepare('DELETE FROM categories WHERE id = ? AND NOT EXISTS (SELECT 1 FROM reports WHERE category_id = ?) AND NOT EXISTS (SELECT 1 FROM categories WHERE parent_id = ?)')
+        .run(systemVideo.id, systemVideo.id, systemVideo.id);
+    }
+    return;
+  }
+
+  if (systemVideo) {
+    db.prepare("UPDATE categories SET template_type = 'video', parent_id = NULL, name = '检测视频', updated_at = ? WHERE id = ?")
+      .run(now(), systemVideo.id);
+  }
 }
 
 function migrateUserRoles() {
@@ -378,6 +530,15 @@ function ensureDefaultTemplateCategories() {
   ensureRootCategory('entrust', '委托单/任务单模板');
   ensureRootCategory('auxiliary', '辅助检测');
   ensureRootCategory('system', '管理体系');
+  ensureRootCategory('video', '道路工程');
+  ensureRootCategory('video', '桥梁隧道');
+  ensureRootCategory('project', '阜南南阳大道');
+  ensureRootCategory('instrument', '仪器使用记录');
+  migrateToolCategories();
+  ensureRootCategory('tool', '离线PDF工具箱-7项功能');
+  ensureRootCategory('tool', '离线PDF工具箱-拆分书籍对开页');
+  ensureRootCategory('tool', '离线PDF工具箱-交替合并');
+  seedInstrumentCatalog();
   [
     '质量手册',
     '程序文件',
@@ -387,6 +548,65 @@ function ensureDefaultTemplateCategories() {
     '内审资料',
     '资质证书'
   ].forEach((name) => ensureRootCategory('system', name));
+}
+
+function migrateToolCategories() {
+  const legacyRoot = db.prepare(`
+    SELECT id FROM categories
+    WHERE template_type = 'tool' AND parent_id IS NULL AND name = '常用工具'
+  `).get();
+  if (!legacyRoot) return;
+
+  const toolNames = [
+    '离线PDF工具箱-7项功能',
+    '离线PDF工具箱-拆分书籍对开页',
+    '离线PDF工具箱-交替合并'
+  ];
+  const childCount = db.prepare(`
+    SELECT COUNT(*) AS count FROM categories
+    WHERE template_type = 'tool' AND parent_id = ?
+  `).get(legacyRoot.id).count;
+  if (!childCount) {
+    db.prepare('DELETE FROM categories WHERE id = ?').run(legacyRoot.id);
+    return;
+  }
+
+  db.exec('BEGIN');
+  try {
+    db.prepare(`
+      UPDATE categories
+      SET parent_id = NULL, sort_order = CASE name
+        WHEN ? THEN 1
+        WHEN ? THEN 2
+        WHEN ? THEN 3
+        ELSE sort_order
+      END, updated_at = ?
+      WHERE template_type = 'tool' AND parent_id = ?
+    `).run(...toolNames, now(), legacyRoot.id);
+    db.prepare('DELETE FROM categories WHERE id = ?').run(legacyRoot.id);
+    db.exec('COMMIT');
+  } catch (error) {
+    db.exec('ROLLBACK');
+    throw error;
+  }
+}
+
+function ensureChildCategory(templateType, parentName, name, sortOrder) {
+  const parent = db.prepare(`
+    SELECT id FROM categories
+    WHERE template_type = ? AND parent_id IS NULL AND name = ?
+  `).get(templateType, parentName);
+  if (!parent) return;
+  const existing = db.prepare(`
+    SELECT id FROM categories
+    WHERE template_type = ? AND parent_id = ? AND name = ?
+  `).get(templateType, parent.id, name);
+  if (existing) return;
+  const timestamp = now();
+  db.prepare(`
+    INSERT INTO categories (name, template_type, parent_id, sort_order, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, ?)
+  `).run(name, templateType, parent.id, sortOrder, timestamp, timestamp);
 }
 
 function ensureRootCategory(templateType, name) {
@@ -424,6 +644,16 @@ async function handleRequest(req, res) {
 
   if (pathname.startsWith('/preview/')) {
     await handlePreview(req, res, pathname);
+    return;
+  }
+
+  if (pathname.startsWith('/videos/')) {
+    await handleVideoStream(req, res, pathname);
+    return;
+  }
+
+  if (pathname === '/vendor/xlsx.full.min.js') {
+    serveAbsoluteFile(res, path.join(ROOT_DIR, 'node_modules', 'xlsx', 'dist', 'xlsx.full.min.js'));
     return;
   }
 
@@ -487,6 +717,53 @@ async function handleApi(req, res, requestUrl) {
     return;
   }
 
+  if (req.method === 'GET' && pathname === '/api/standard-library') {
+    if (!canSeeTemplateType(user, 'system')) {
+      sendJson(res, 200, { standards: [] });
+      return;
+    }
+    sendJson(res, 200, { standards: listStandardLibrary() });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/standard-check/uploads') {
+    const files = fs.readdirSync(STANDARD_CHECK_UPLOAD_DIR, { withFileTypes: true })
+      .filter((entry) => entry.isFile())
+      .map((entry) => {
+        const filePath = path.join(STANDARD_CHECK_UPLOAD_DIR, entry.name);
+        const stat = fs.statSync(filePath);
+        return { name: entry.name, size: stat.size, uploadedAt: stat.mtime.toISOString() };
+      })
+      .sort((a, b) => b.uploadedAt.localeCompare(a.uploadedAt));
+    sendJson(res, 200, { files });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/standard-check/uploads') {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    const buffer = await readRequestBody(req, MAX_UPLOAD_BYTES);
+    const form = parseMultipart(req, buffer);
+    const file = form.files.file;
+    if (!file) throw publicError(400, '请选择要上传的查新文件');
+    if (!/\.(xls|xlsx|xlsm)$/i.test(file.filename || '')) {
+      throw publicError(400, '这里只能上传 Excel 查新文件（xls、xlsx、xlsm）');
+    }
+    const originalName = path.basename(file.filename);
+    const ext = path.extname(originalName).toLowerCase();
+    const base = cleanText(path.basename(originalName, ext)).replace(/[\\/:*?"<>|]/g, '_') || '查新表';
+    let storedName = `${base}${ext}`;
+    let index = 2;
+    while (fs.existsSync(path.join(STANDARD_CHECK_UPLOAD_DIR, storedName))) {
+      storedName = `${base}-${index}${ext}`;
+      index += 1;
+    }
+    fs.writeFileSync(path.join(STANDARD_CHECK_UPLOAD_DIR, storedName), file.data);
+    logOperation(admin, '上传标准查新表', 'standard_check', null, storedName, originalName);
+    sendJson(res, 200, { file: { name: storedName, size: file.data.length, uploadedAt: new Date().toISOString() } });
+    return;
+  }
+
   if (req.method === 'GET' && pathname === '/api/dashboard') {
     sendJson(res, 200, getDashboardStats(user));
     return;
@@ -494,6 +771,139 @@ async function handleApi(req, res, requestUrl) {
 
   if (req.method === 'GET' && pathname === '/api/export/templates') {
     await handleTemplateExport(req, res, user);
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/export/entrust-records') {
+    await handleEntrustRecordsExport(req, res, user);
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/entrust-records') {
+    sendJson(res, 200, { records: listEntrustRecords(requestUrl.searchParams) });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/funan-project') {
+    if (!canSeeTemplateType(user, 'project')) {
+      sendJson(res, 200, { records: [] });
+      return;
+    }
+    sendJson(res, 200, { records: listFunanLedgerRecords() });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/instrument-usage') {
+    sendJson(res, 200, { records: listInstrumentUsageRecords(), catalog: listInstrumentCatalog() });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/sample-origins') {
+    const rows = db.prepare('SELECT sample_name AS sampleName, origin FROM sample_origins ORDER BY sample_name, origin').all();
+    sendJson(res, 200, { origins: rows });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/sample-origins') {
+    const body = await readJson(req);
+    const sampleName = cleanText(body.sampleName);
+    const origin = cleanText(body.origin);
+    if (!sampleName || !origin) {
+      sendJson(res, 400, { message: '样品名称和产地不能为空' });
+      return;
+    }
+    const timestamp = now();
+    db.prepare(`
+      INSERT INTO sample_origins (sample_name, origin, created_by, created_at, updated_at)
+      VALUES (?, ?, ?, ?, ?)
+      ON CONFLICT(sample_name, origin) DO UPDATE SET updated_at = excluded.updated_at
+    `).run(sampleName, origin, user.id, timestamp, timestamp);
+    sendJson(res, 200, { ok: true, sampleName, origin });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/instrument-usage/match') {
+    const body = await readJson(req);
+    sendJson(res, 200, { instruments: matchInstruments(body.parameters || '') });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/instrument-usage') {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    const body = await readJson(req);
+    const records = saveInstrumentUsageRecords(body, admin);
+    sendJson(res, 201, { records });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/funan-project/import') {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    await handleFunanLedgerImport(req, res, admin);
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/funan-project/paste') {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    const body = await readJson(req);
+    const result = importFunanPastedText(body.text, admin);
+    sendJson(res, 200, result);
+    return;
+  }
+
+  const funanTaskMatch = pathname.match(/^\/api\/funan-project\/tasks\/(\d+)$/);
+  if (req.method === 'POST' && funanTaskMatch) {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    const body = await readJson(req);
+    const task = saveFunanTaskForm(Number(funanTaskMatch[1]), body, admin);
+    sendJson(res, 200, { task });
+    return;
+  }
+
+  const funanPrintedMatch = pathname.match(/^\/api\/funan-project\/tasks\/(\d+)\/printed$/);
+  if (req.method === 'POST' && funanPrintedMatch) {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    markFunanTaskPrinted(Number(funanPrintedMatch[1]), admin);
+    sendJson(res, 200, { ok: true });
+    return;
+  }
+
+  if (req.method === 'GET' && pathname === '/api/training-videos') {
+    if (!canSeeTemplateType(user, 'video')) {
+      sendJson(res, 200, { videos: [], videoDir: VIDEO_DIR });
+      return;
+    }
+    sendJson(res, 200, { videos: listTrainingVideos(), videoDir: VIDEO_DIR });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/training-videos') {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    const body = await readJson(req);
+    const video = createTrainingVideo(body, admin);
+    sendJson(res, 201, { video });
+    return;
+  }
+
+  const videoPatchMatch = pathname.match(/^\/api\/training-videos\/(\d+)$/);
+  if (req.method === 'PATCH' && videoPatchMatch) {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    const body = await readJson(req);
+    const video = updateTrainingVideo(Number(videoPatchMatch[1]), body, admin);
+    sendJson(res, 200, { video });
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/entrust-records') {
+    const body = await readJson(req);
+    const record = createEntrustRecord(body, user);
+    sendJson(res, 201, { record });
     return;
   }
 
@@ -542,6 +952,28 @@ async function handleApi(req, res, requestUrl) {
     const admin = requireAdmin(user, res);
     if (!admin) return;
     await handleBulkReportImport(req, res, admin);
+    return;
+  }
+
+  const reportPdfUploadMatch = pathname.match(/^\/api\/reports\/(\d+)\/pdf$/);
+  if (req.method === 'POST' && reportPdfUploadMatch) {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    await handleReportPdfUpload(req, res, Number(reportPdfUploadMatch[1]), admin);
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/software-upload') {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    await handleSoftwareUpload(req, res, admin);
+    return;
+  }
+
+  if (req.method === 'POST' && pathname === '/api/reports/pdf-auto-match') {
+    const admin = requireAdmin(user, res);
+    if (!admin) return;
+    await handleReportPdfAutoMatch(req, res, admin);
     return;
   }
 
@@ -695,13 +1127,352 @@ function requireSuperAdmin(user, res) {
 
 function listCategories(user) {
   const visibleTypes = visibleTemplateTypes(user);
-  return db.prepare(`
+  const categories = db.prepare(`
     SELECT c.*,
       (SELECT COUNT(*) FROM reports r WHERE r.category_id = c.id AND r.active = 1 AND r.template_type = c.template_type) AS report_count
     FROM categories c
     WHERE c.template_type IN (${visibleTypes.map(() => '?').join(',')})
     ORDER BY c.template_type, COALESCE(c.parent_id, 0), c.sort_order, c.id
   `).all(...visibleTypes);
+  const videoCounts = new Map(db.prepare(`
+    SELECT category, COUNT(*) AS count
+    FROM training_videos
+    WHERE active = 1
+    GROUP BY category
+  `).all().map((row) => [row.category || '', row.count]));
+  return categories.map((category) => {
+    if (category.template_type === 'video') {
+      return { ...category, report_count: videoCounts.get(category.name) || 0 };
+    }
+    if (category.template_type === 'project' && category.name === '阜南南阳大道') {
+      return { ...category, report_count: db.prepare('SELECT COUNT(*) AS count FROM funan_ledger_records').get().count };
+    }
+    return category;
+  });
+}
+
+function listStandardLibrary() {
+  return db.prepare(`
+    SELECT r.name, r.pdf_original_name, r.word_original_name, r.excel_original_name
+    FROM reports r
+    JOIN categories c ON c.id = r.category_id
+    WHERE r.active = 1
+      AND r.template_type = 'system'
+      AND c.template_type = 'system'
+      AND c.name = '标准规范下载'
+    ORDER BY r.name COLLATE NOCASE
+  `).all().map((row) => ({
+    name: row.name,
+    fileName: row.pdf_original_name || row.word_original_name || row.excel_original_name || ''
+  }));
+}
+
+function listFunanLedgerRecords() {
+  return db.prepare(`
+    SELECT l.*, f.id AS form_id, f.client_name, f.project_name, f.sample_name, f.sample_spec,
+      f.test_item, f.execution_standard, f.method, f.record_no, f.report_no, f.send_dept,
+      f.receive_dept, f.sender, f.status, f.confirmed_at, f.printed_at,
+      confirmer.display_name AS confirmed_by_name, printer.display_name AS printed_by_name
+    FROM funan_ledger_records l
+    LEFT JOIN funan_task_forms f ON f.ledger_id = l.id
+    LEFT JOIN users confirmer ON confirmer.id = f.confirmed_by
+    LEFT JOIN users printer ON printer.id = f.printed_by
+    ORDER BY l.entrust_date DESC, l.id DESC
+  `).all().map((row) => ({
+    id: row.id,
+    entrustNo: row.entrust_no,
+    taskNo: row.task_no,
+    sampleNo: row.sample_no,
+    quantity: row.quantity,
+    treatment: row.treatment,
+    usage: row.usage,
+    entrustDate: row.entrust_date,
+    sourceRow: row.source_row,
+    task: row.form_id ? {
+      id: row.form_id,
+      clientName: row.client_name,
+      projectName: row.project_name,
+      sampleName: row.sample_name,
+      sampleSpec: row.sample_spec,
+      testItem: row.test_item,
+      executionStandard: row.execution_standard,
+      method: row.method,
+      recordNo: row.record_no,
+      reportNo: row.report_no,
+      sendDept: row.send_dept,
+      receiveDept: row.receive_dept,
+      sender: row.sender,
+      status: row.status,
+      confirmedAt: row.confirmed_at,
+      confirmedByName: row.confirmed_by_name || '',
+      printedAt: row.printed_at,
+      printedByName: row.printed_by_name || ''
+    } : null
+  }));
+}
+
+function listInstrumentCatalog() {
+  return db.prepare('SELECT id, name, code, parameters, category FROM instrument_catalog ORDER BY id').all();
+}
+
+function listInstrumentUsageRecords() {
+  return db.prepare(`SELECT id, usage_date AS usageDate, sample_no AS sampleNo,
+    test_parameters AS testParameters, instrument_name AS instrumentName,
+    instrument_code AS instrumentCode, start_time AS startTime, end_time AS endTime,
+    user_name AS userName, before_status AS beforeStatus, after_status AS afterStatus,
+    remark, created_at AS createdAt FROM instrument_usage_records ORDER BY id DESC LIMIT 300`).all();
+}
+
+function matchInstruments(parameters) {
+  const input = cleanText(parameters).toLowerCase();
+  if (!input) return [];
+  const tokens = input.split(/[，,、;；\n\r]+/).map((item) => item.trim()).filter(Boolean);
+  const rows = db.prepare('SELECT id, name, code, parameters, category FROM instrument_catalog ORDER BY id').all();
+  return rows.filter((row) => {
+    const haystack = `${row.name} ${row.code} ${row.parameters} ${row.category}`.toLowerCase();
+    return tokens.some((token) => haystack.includes(token)) || haystack.includes(input);
+  }).map((row) => ({ ...row, match: row.parameters || row.category }));
+}
+
+function saveInstrumentUsageRecords(body, user) {
+  const selected = Array.isArray(body.instruments) ? body.instruments : [];
+  if (!selected.length) throw publicError(400, '请先根据试验参数匹配并选择仪器');
+  const usageDate = cleanText(body.usageDate) || now().slice(0, 10);
+  const timestamp = now();
+  const insert = db.prepare(`INSERT INTO instrument_usage_records
+    (usage_date, sample_no, test_parameters, instrument_name, instrument_code,
+     start_time, end_time, user_name, before_status, after_status, remark, created_by, created_at)
+    VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`);
+  db.exec('BEGIN;');
+  try {
+    for (const item of selected) {
+      insert.run(usageDate, cleanText(body.sampleNo), cleanText(body.parameters), cleanText(item.name), cleanText(item.code),
+        cleanText(body.startTime), cleanText(body.endTime), cleanText(body.userName),
+        cleanText(body.beforeStatus) || '正常', cleanText(body.afterStatus) || '正常', cleanText(body.remark), user.id, timestamp);
+    }
+    db.exec('COMMIT;');
+  } catch (error) {
+    try { db.exec('ROLLBACK;'); } catch (_) {}
+    throw error;
+  }
+  logOperation(user, '新增仪器使用记录', 'instrument_usage', null, cleanText(body.sampleNo), `仪器 ${selected.length} 台`);
+  return listInstrumentUsageRecords();
+}
+
+function seedInstrumentCatalog() {
+  const source = 'C:\\Users\\Public\\仪器使用记录\\仪器名称及编号(1).xlsx';
+  if (!fs.existsSync(source)) return;
+  const current = db.prepare('SELECT COUNT(*) AS count FROM instrument_catalog').get().count;
+  if (current > 0) return;
+  try {
+    const workbook = XLSX.readFile(source, { cellFormula: false, cellStyles: false });
+    const insert = db.prepare('INSERT OR IGNORE INTO instrument_catalog (name, code, parameters, category, source) VALUES (?, ?, ?, ?, ?)');
+    const first = workbook.Sheets[workbook.SheetNames[0]];
+    XLSX.utils.sheet_to_json(first, { header: 1, defval: '', raw: false }).forEach((row) => {
+      const label = cleanText(row[0]);
+      const match = label.match(/^(.*)\(([^()]+(?:\([^()]+\))?)\)$/);
+      if (match) insert.run(match[1], match[2], cleanText(row[1]), cleanText(row[2]), source);
+    });
+    const second = workbook.Sheets[workbook.SheetNames[1]];
+    XLSX.utils.sheet_to_json(second, { header: 1, defval: '', raw: false }).forEach((row) => {
+      const parameter = cleanText(row[0]);
+      if (!parameter) return;
+      String(row[1] || '').split(/[、,，]/).forEach((item) => {
+        const label = cleanText(item);
+        const match = label.match(/^(.*)\(([^()]+(?:\([^()]+\))?)\)$/);
+        if (match) insert.run(match[1], match[2], parameter, '', source);
+      });
+    });
+  } catch (error) {
+    console.error('仪器一览表导入失败', error.message);
+  }
+}
+
+async function handleFunanLedgerImport(req, res, user) {
+  const buffer = await readRequestBody(req, MAX_UPLOAD_BYTES);
+  const form = parseMultipart(req, buffer);
+  const file = form.files.ledgerFile;
+  if (!file) throw publicError(400, '请选择台账 Excel 文件');
+  const ext = path.extname(file.filename || '').toLowerCase();
+  if (!['.xls', '.xlsx'].includes(ext)) throw publicError(400, '台账只支持 .xls 或 .xlsx 文件');
+
+  let rows;
+  try {
+    const workbook = XLSX.read(file.data, { type: 'buffer', cellDates: false });
+    const sheet = workbook.Sheets[workbook.SheetNames[0]];
+    rows = XLSX.utils.sheet_to_json(sheet, { header: 1, defval: '', raw: false });
+  } catch (_) {
+    throw publicError(400, '台账 Excel 无法读取，请确认文件没有损坏或加密');
+  }
+  if (rows.length < 2) throw publicError(400, '台账中没有可导入的数据');
+
+  const header = rows[0].map((value) => cleanText(value));
+  const indexOf = (name) => header.indexOf(name);
+  const required = ['委托编号', '任务编号：', '样品编号', '取样数量', '工程部位/用途', '日期'];
+  const missing = required.filter((name) => indexOf(name) === -1);
+  if (missing.length) throw publicError(400, `台账表头缺少：${missing.join('、')}`);
+
+  const fields = {
+    entrustNo: indexOf('委托编号'),
+    taskNo: indexOf('任务编号：'),
+    sampleNo: indexOf('样品编号'),
+    quantity: indexOf('取样数量'),
+    treatment: indexOf('取样数量') + 1,
+    usage: indexOf('工程部位/用途'),
+    entrustDate: indexOf('日期')
+  };
+  let inserted = 0;
+  let updated = 0;
+  const timestamp = now();
+  db.exec('BEGIN;');
+  try {
+    for (let rowIndex = 1; rowIndex < rows.length; rowIndex += 1) {
+      const row = rows[rowIndex];
+      const taskNo = cleanText(row[fields.taskNo]);
+      if (!taskNo) continue;
+      const values = [
+        cleanText(row[fields.entrustNo]), taskNo, cleanText(row[fields.sampleNo]),
+        cleanText(row[fields.quantity]), cleanText(row[fields.treatment]), cleanText(row[fields.usage]),
+        cleanText(row[fields.entrustDate]), rowIndex + 1, user.id, timestamp
+      ];
+      const existing = db.prepare('SELECT id FROM funan_ledger_records WHERE task_no = ?').get(taskNo);
+      if (existing) {
+        db.prepare(`UPDATE funan_ledger_records SET entrust_no=?, sample_no=?, quantity=?, treatment=?, usage=?, entrust_date=?, source_row=?, imported_by=?, updated_at=? WHERE id=?`)
+          .run(values[0], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], existing.id);
+        updated += 1;
+      } else {
+        db.prepare(`INSERT INTO funan_ledger_records (entrust_no, task_no, sample_no, quantity, treatment, usage, entrust_date, source_row, imported_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(...values, timestamp);
+        inserted += 1;
+      }
+    }
+    db.exec('COMMIT;');
+  } catch (error) {
+    try { db.exec('ROLLBACK;'); } catch (_) {}
+    throw error;
+  }
+  logOperation(user, '导入阜南弯沉台账', 'funan_ledger', null, file.filename, `新增 ${inserted} 条，更新 ${updated} 条`);
+  sendJson(res, 200, { inserted, updated, total: inserted + updated });
+}
+
+function importFunanPastedText(text, user) {
+  const rows = parseExcelClipboardText(text);
+  if (!rows.length) throw publicError(400, '请先从 Excel 复制一行或多行台账信息');
+  const start = /委托编号|任务编号/.test(rows[0].join(' ')) ? 1 : 0;
+  const dataRows = rows.slice(start).filter((row) => cleanText(row[1]));
+  if (!dataRows.length) throw publicError(400, '没有识别到任务编号，请复制 Excel 中完整的一行');
+
+  const timestamp = now();
+  let inserted = 0;
+  let updated = 0;
+  const taskNos = [];
+  db.exec('BEGIN;');
+  try {
+    for (let index = 0; index < dataRows.length; index += 1) {
+      const row = dataRows[index];
+      const values = [
+        cleanText(row[0]), cleanText(row[1]), cleanText(row[2]), cleanText(row[3]),
+        cleanText(row[4]), cleanText(row[6]), cleanText(row[8]), index + 1, user.id, timestamp
+      ];
+      const existing = db.prepare('SELECT id FROM funan_ledger_records WHERE task_no = ?').get(values[1]);
+      if (existing) {
+        db.prepare(`UPDATE funan_ledger_records SET entrust_no=?, sample_no=?, quantity=?, treatment=?, usage=?, entrust_date=?, source_row=?, imported_by=?, updated_at=? WHERE id=?`)
+          .run(values[0], values[2], values[3], values[4], values[5], values[6], values[7], values[8], values[9], existing.id);
+        updated += 1;
+      } else {
+        db.prepare(`INSERT INTO funan_ledger_records (entrust_no, task_no, sample_no, quantity, treatment, usage, entrust_date, source_row, imported_by, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)`)
+          .run(...values, timestamp);
+        inserted += 1;
+      }
+      taskNos.push(values[1]);
+    }
+    db.exec('COMMIT;');
+  } catch (error) {
+    try { db.exec('ROLLBACK;'); } catch (_) {}
+    throw error;
+  }
+  logOperation(user, '粘贴导入阜南弯沉台账', 'funan_ledger', null, 'Excel 粘贴内容', `新增 ${inserted} 条，更新 ${updated} 条`);
+  return { inserted, updated, total: inserted + updated, taskNos };
+}
+
+function parseExcelClipboardText(text) {
+  const rows = [];
+  let row = [];
+  let cell = '';
+  let quoted = false;
+  const source = String(text || '').replace(/\r\n/g, '\n').replace(/\r/g, '\n');
+  for (let index = 0; index < source.length; index += 1) {
+    const char = source[index];
+    if (char === '"') {
+      if (quoted && source[index + 1] === '"') {
+        cell += '"';
+        index += 1;
+      } else {
+        quoted = !quoted;
+      }
+      continue;
+    }
+    if (char === '\t' && !quoted) {
+      row.push(cell);
+      cell = '';
+      continue;
+    }
+    if (char === '\n' && !quoted) {
+      row.push(cell);
+      if (row.some((value) => cleanText(value))) rows.push(row);
+      row = [];
+      cell = '';
+      continue;
+    }
+    cell += char;
+  }
+  row.push(cell);
+  if (row.some((value) => cleanText(value))) rows.push(row);
+  return rows;
+}
+
+function taskCodeFromSample(sampleNo, prefix) {
+  const value = cleanText(sampleNo);
+  return value.startsWith('YP-') ? `${prefix}-${value.slice(3)}` : value ? `${prefix}-${value}` : '';
+}
+
+function saveFunanTaskForm(ledgerId, body, user) {
+  const ledger = db.prepare('SELECT * FROM funan_ledger_records WHERE id = ?').get(ledgerId);
+  if (!ledger) throw publicError(404, '没有找到这条台账');
+  const existing = db.prepare('SELECT * FROM funan_task_forms WHERE ledger_id = ?').get(ledgerId);
+  const value = (name, fallback) => cleanText(body[name]) || fallback;
+  const timestamp = now();
+  const fields = {
+    clientName: value('clientName', existing?.client_name || '安徽省新路建设工程集团有限责任公司'),
+    projectName: value('projectName', existing?.project_name || '南阳大道（阜南段）修复养护工程许城路项目'),
+    sampleName: value('sampleName', existing?.sample_name || '沥青混凝土'),
+    sampleSpec: value('sampleSpec', existing?.sample_spec || 'AC-13'),
+    testItem: value('testItem', existing?.test_item || '弯沉'),
+    executionStandard: value('executionStandard', existing?.execution_standard || 'JTG 3450-2019'),
+    method: value('method', existing?.method || 'JTG 3450-2019综合法'),
+    recordNo: value('recordNo', existing?.record_no || taskCodeFromSample(ledger.sample_no, 'JL')),
+    reportNo: value('reportNo', existing?.report_no || taskCodeFromSample(ledger.sample_no, 'BG')),
+    sendDept: value('sendDept', existing?.send_dept || '综合部'),
+    receiveDept: value('receiveDept', existing?.receive_dept || '检测部'),
+    sender: value('sender', existing?.sender || '李晓东')
+  };
+  if (existing) {
+    db.prepare(`UPDATE funan_task_forms SET client_name=?, project_name=?, sample_name=?, sample_spec=?, test_item=?, execution_standard=?, method=?, record_no=?, report_no=?, send_dept=?, receive_dept=?, sender=?, status='confirmed', confirmed_by=?, confirmed_at=?, updated_at=? WHERE ledger_id=?`)
+      .run(fields.clientName, fields.projectName, fields.sampleName, fields.sampleSpec, fields.testItem, fields.executionStandard, fields.method, fields.recordNo, fields.reportNo, fields.sendDept, fields.receiveDept, fields.sender, user.id, timestamp, timestamp, ledgerId);
+  } else {
+    db.prepare(`INSERT INTO funan_task_forms (ledger_id, client_name, project_name, sample_name, sample_spec, test_item, execution_standard, method, record_no, report_no, send_dept, receive_dept, sender, status, confirmed_by, confirmed_at, created_at, updated_at) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, 'confirmed', ?, ?, ?, ?)`)
+      .run(ledgerId, fields.clientName, fields.projectName, fields.sampleName, fields.sampleSpec, fields.testItem, fields.executionStandard, fields.method, fields.recordNo, fields.reportNo, fields.sendDept, fields.receiveDept, fields.sender, user.id, timestamp, timestamp, timestamp);
+  }
+  logOperation(user, '确认阜南弯沉任务单', 'funan_task', ledgerId, ledger.task_no, fields.recordNo);
+  return listFunanLedgerRecords().find((item) => item.id === ledgerId)?.task;
+}
+
+function markFunanTaskPrinted(ledgerId, user) {
+  const task = db.prepare('SELECT id FROM funan_task_forms WHERE ledger_id = ?').get(ledgerId);
+  if (!task) throw publicError(400, '请先确认任务单，再打印');
+  db.prepare('UPDATE funan_task_forms SET printed_by = ?, printed_at = ?, updated_at = ? WHERE ledger_id = ?')
+    .run(user.id, now(), now(), ledgerId);
+  logOperation(user, '打印阜南弯沉任务单', 'funan_task', ledgerId, String(ledgerId), '已打印');
 }
 
 function listReports(categoryId, templateType, includeInactive = false, user = null) {
@@ -773,10 +1544,12 @@ function shapeReport(row) {
     hasWord: Boolean(row.word_file_name),
     hasPdf: Boolean(row.pdf_file_name),
     hasExcel: Boolean(row.excel_file_name),
+    hasSoftware: Boolean(row.software_file_name),
     active: Boolean(row.active),
     wordOriginalName: row.word_original_name || '',
     pdfOriginalName: row.pdf_original_name || '',
     excelOriginalName: row.excel_original_name || '',
+    softwareOriginalName: row.software_original_name || '',
     uploadedByName: row.uploaded_by_name || '',
     uploadedAt: row.uploaded_at || '',
     lastDownloadByName: row.last_download_by_name || '',
@@ -872,6 +1645,206 @@ async function handleTemplateExport(req, res, user) {
     'Cache-Control': 'no-cache'
   });
   res.end(csv);
+}
+
+async function handleEntrustRecordsExport(req, res, user) {
+  const records = listEntrustRecords(new URLSearchParams());
+  const header = ['登记ID', '委托编号', '任务编号', '委托单位', '工程名称', '工程代码', '样品名称', '样品流水号', '样品编号', '记录编号', '报告编号', '委托日期', '接样日期', '接样人', '委托人', '下达部门', '接受部门', '工程部位/用途', '备注', '登记人', '登记时间'];
+  const lines = [header, ...records.map((record) => [
+    record.id,
+    record.entrustNo,
+    record.taskNo,
+    record.clientName,
+    record.projectName,
+    record.projectCode,
+    record.sampleName,
+    record.sampleSerial,
+    record.sampleCode,
+    record.recordNo,
+    record.reportNo,
+    record.entrustDate,
+    record.receiveDate,
+    record.receiver,
+    record.sender,
+    record.sendDept,
+    record.receiveDept,
+    record.usage,
+    record.remark,
+    record.createdByName,
+    formatChinaTime(record.createdAt)
+  ])].map((line) => line.map(csvCell).join(','));
+
+  const csv = `\uFEFF${lines.join('\r\n')}`;
+  logOperation(user, '导出委托台账', 'export', null, '委托台账', `共 ${records.length} 条`);
+  res.writeHead(200, {
+    'Content-Type': 'text/csv; charset=utf-8',
+    'Content-Disposition': contentDisposition(`恒信通委托台账-${formatFileTime(new Date())}.csv`),
+    'Cache-Control': 'no-cache'
+  });
+  res.end(csv);
+}
+
+function listEntrustRecords(searchParams) {
+  const keyword = cleanText(searchParams.get('keyword'));
+  const params = [];
+  let where = '';
+  if (keyword) {
+    where = `
+      WHERE er.entrust_no LIKE ? OR er.task_no LIKE ? OR er.client_name LIKE ?
+        OR er.project_name LIKE ? OR er.sample_name LIKE ? OR er.receiver LIKE ?
+    `;
+    const like = `%${keyword}%`;
+    params.push(like, like, like, like, like, like);
+  }
+
+  return db.prepare(`
+    SELECT er.*, u.display_name AS created_by_name
+    FROM entrust_records er
+    LEFT JOIN users u ON u.id = er.created_by
+    ${where}
+    ORDER BY er.entrust_date DESC, er.id DESC
+    LIMIT 500
+  `).all(...params).map(publicEntrustRecord);
+}
+
+function createEntrustRecord(body, user) {
+  const clientName = cleanRequiredText(body.clientName, '请填写委托单位');
+  const projectName = cleanRequiredText(body.projectName, '请填写工程名称');
+  const projectCode = normalizeProjectCode(body.projectCode);
+  const sampleName = cleanRequiredText(body.sampleName, '请选择样品名称');
+  const entrustDate = normalizeDate(body.entrustDate, '请填写委托日期');
+  const receiveDate = normalizeDate(body.receiveDate || body.entrustDate, '请填写接样日期');
+  const entrustYear = entrustDate.slice(0, 4);
+  const receiver = cleanText(body.receiver) || '李晓东';
+  const sender = cleanText(body.sender);
+  const sendDept = cleanText(body.sendDept) || '综合部';
+  const receiveDept = cleanText(body.receiveDept) || '检测部';
+  const usage = cleanText(body.usage);
+  const remark = cleanText(body.remark);
+  const timestamp = now();
+
+  db.exec('BEGIN IMMEDIATE;');
+  try {
+    const entrustSerial = nextEntrustSerial(entrustYear, projectCode);
+    const sampleSerial = nextSampleSerial(entrustYear, projectCode, sampleName);
+    const entrustNo = buildBusinessNo('WT', entrustYear, entrustSerial, projectCode);
+    const taskNo = buildBusinessNo('RW', entrustYear, entrustSerial, projectCode);
+    const samplePrefix = cleanText(body.samplePrefix);
+    const sampleSuffix = cleanText(body.sampleSuffix);
+    const sampleCode = samplePrefix && sampleSuffix ? buildSampleBusinessNo('YP', entrustYear, samplePrefix, sampleSerial, sampleSuffix) : cleanText(body.sampleCode);
+    const recordNo = samplePrefix && sampleSuffix ? buildSampleBusinessNo('JL', entrustYear, samplePrefix, sampleSerial, sampleSuffix) : cleanText(body.recordNo);
+    const reportNo = samplePrefix && sampleSuffix ? buildSampleBusinessNo('BG', entrustYear, samplePrefix, sampleSerial, sampleSuffix) : cleanText(body.reportNo);
+
+    const result = db.prepare(`
+      INSERT INTO entrust_records (
+        client_name, project_name, project_code, entrust_year, entrust_serial,
+        entrust_no, task_no, sample_name, sample_serial, sample_code, record_no, report_no,
+        entrust_date, receive_date, receiver, sender, send_dept, receive_dept, usage, remark,
+        created_by, created_at, updated_at
+      )
+      VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `).run(
+      clientName, projectName, projectCode, entrustYear, entrustSerial,
+      entrustNo, taskNo, sampleName, sampleSerial, sampleCode, recordNo, reportNo,
+      entrustDate, receiveDate, receiver, sender, sendDept, receiveDept, usage, remark,
+      user.id, timestamp, timestamp
+    );
+
+    db.exec('COMMIT;');
+    const record = getEntrustRecord(Number(result.lastInsertRowid));
+    logOperation(user, '登记委托台账', 'entrust_record', record.id, record.entrustNo, `${record.clientName} / ${record.sampleName}`);
+    return record;
+  } catch (error) {
+    db.exec('ROLLBACK;');
+    if (String(error.message || '').includes('UNIQUE')) {
+      throw publicError(409, '编号已存在，请刷新后重新登记');
+    }
+    throw error;
+  }
+}
+
+function getEntrustRecord(id) {
+  const row = db.prepare(`
+    SELECT er.*, u.display_name AS created_by_name
+    FROM entrust_records er
+    LEFT JOIN users u ON u.id = er.created_by
+    WHERE er.id = ?
+  `).get(id);
+  if (!row) throw publicError(404, '没有找到这条委托台账');
+  return publicEntrustRecord(row);
+}
+
+function nextEntrustSerial(entrustYear, projectCode) {
+  const row = db.prepare(`
+    SELECT COALESCE(MAX(entrust_serial), 0) + 1 AS nextSerial
+    FROM entrust_records
+    WHERE entrust_year = ? AND project_code = ?
+  `).get(entrustYear, projectCode);
+  return row.nextSerial;
+}
+
+function nextSampleSerial(entrustYear, projectCode, sampleName) {
+  const row = db.prepare(`
+    SELECT COALESCE(MAX(sample_serial), 0) + 1 AS nextSerial
+    FROM entrust_records
+    WHERE entrust_year = ? AND project_code = ? AND sample_name = ?
+  `).get(entrustYear, projectCode, sampleName);
+  return row.nextSerial;
+}
+
+function buildBusinessNo(prefix, year, serial, projectCode) {
+  return `${prefix}-${year}-${String(serial).padStart(4, '0')}-${projectCode}`;
+}
+
+function buildSampleBusinessNo(prefix, year, samplePrefix, serial, sampleSuffix) {
+  return `${prefix}-${year}-${samplePrefix}${String(serial).padStart(4, '0')}-${sampleSuffix}`;
+}
+
+function cleanRequiredText(value, message) {
+  const text = cleanText(value);
+  if (!text) throw publicError(400, message);
+  return text;
+}
+
+function normalizeProjectCode(value) {
+  const code = cleanText(value).toUpperCase();
+  if (!/^[A-Z]\d{2}$/.test(code)) throw publicError(400, '工程代码格式不正确，例如 A06');
+  return code;
+}
+
+function normalizeDate(value, message) {
+  const text = cleanText(value);
+  if (!/^\d{4}-\d{2}-\d{2}$/.test(text)) throw publicError(400, message);
+  return text;
+}
+
+function publicEntrustRecord(row) {
+  return {
+    id: row.id,
+    clientName: row.client_name,
+    projectName: row.project_name,
+    projectCode: row.project_code,
+    entrustYear: row.entrust_year,
+    entrustSerial: String(row.entrust_serial).padStart(4, '0'),
+    entrustNo: row.entrust_no,
+    taskNo: row.task_no,
+    sampleName: row.sample_name,
+    sampleSerial: String(row.sample_serial).padStart(4, '0'),
+    sampleCode: row.sample_code || '',
+    recordNo: row.record_no || '',
+    reportNo: row.report_no || '',
+    entrustDate: row.entrust_date,
+    receiveDate: row.receive_date,
+    receiver: row.receiver,
+    sender: row.sender || '',
+    sendDept: row.send_dept,
+    receiveDept: row.receive_dept,
+    usage: row.usage || '',
+    remark: row.remark || '',
+    createdByName: row.created_by_name || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
 }
 
 function csvCell(value) {
@@ -1048,6 +2021,119 @@ async function handleReportSave(req, res, user) {
         // Best effort cleanup.
       }
     }
+    throw error;
+  }
+}
+
+async function handleReportPdfUpload(req, res, reportId, user) {
+  const buffer = await readRequestBody(req, MAX_UPLOAD_BYTES);
+  const form = parseMultipart(req, buffer);
+  const pdfFile = form.files.pdfFile;
+  const report = db.prepare('SELECT * FROM reports WHERE id = ? AND active = 1').get(reportId);
+  if (!report) throw publicError(404, '没有找到这条资料');
+  if (!pdfFile) throw publicError(400, '请选择要上传的 PDF 文件');
+
+  const uploadedAt = now();
+  let saved = null;
+  try {
+    saved = saveUploadedFile(pdfFile, 'pdf', report.name);
+    db.exec('BEGIN;');
+    db.prepare(`
+      UPDATE reports
+      SET pdf_file_name = ?, pdf_original_name = ?, uploaded_by = ?, uploaded_at = ?, updated_at = ?
+      WHERE id = ?
+    `).run(saved.storedName, saved.originalName, user.id, uploadedAt, uploadedAt, reportId);
+    db.prepare(`
+      INSERT INTO upload_records (report_id, file_type, stored_name, original_name, action, uploaded_by, uploaded_at, notes)
+      VALUES (?, 'pdf', ?, ?, 'replace', ?, ?, ?)
+    `).run(reportId, saved.storedName, saved.originalName, user.id, uploadedAt, '列表内上传 PDF');
+    insertReportVersion(reportId, 'pdf', saved.storedName, saved.originalName, 'replace', user.id, uploadedAt, '列表内上传 PDF');
+    logOperation(user, '上传 PDF', 'report', reportId, report.name, saved.originalName);
+    db.exec('COMMIT;');
+    sendJson(res, 200, { report: getReport(reportId) });
+  } catch (error) {
+    try { db.exec('ROLLBACK;'); } catch (_) {}
+    if (saved?.fullPath) {
+      try { fs.unlinkSync(saved.fullPath); } catch (_) {}
+    }
+    throw error;
+  }
+}
+
+async function handleReportPdfAutoMatch(req, res, user) {
+  const buffer = await readRequestBody(req, MAX_UPLOAD_BYTES);
+  const form = parseMultipart(req, buffer);
+  const pdfFile = form.files.pdfFile;
+  const categoryId = nullableInt(form.fields.categoryId);
+
+  if (!categoryId) throw publicError(400, '请先打开标准规范下载分类后再上传 PDF');
+  if (!pdfFile) throw publicError(400, '请选择要上传的 PDF 文件');
+
+  const category = db.prepare("SELECT * FROM categories WHERE id = ? AND template_type = 'system' AND name = '标准规范下载'").get(categoryId);
+  if (!category) throw publicError(400, '只能在管理体系的标准规范下载栏目上传 PDF');
+
+  const reportName = cleanText(path.basename(pdfFile.filename, path.extname(pdfFile.filename))) || '未命名标准规范';
+
+  const uploadedAt = now();
+  let saved = null;
+  try {
+    saved = saveUploadedFile(pdfFile, 'pdf', reportName);
+    db.exec('BEGIN;');
+    db.prepare(`
+      INSERT INTO reports (
+        name, template_type, category_id, remarks, pdf_file_name, pdf_original_name,
+        uploaded_by, uploaded_at, created_at, updated_at
+      )
+      VALUES (?, 'system', ?, '', ?, ?, ?, ?, ?, ?)
+    `).run(reportName, categoryId, saved.storedName, saved.originalName, user.id, uploadedAt, uploadedAt, uploadedAt);
+    const reportId = Number(db.prepare('SELECT last_insert_rowid() AS id').get().id);
+    db.prepare(`
+      INSERT INTO upload_records (report_id, file_type, stored_name, original_name, action, uploaded_by, uploaded_at, notes)
+      VALUES (?, 'pdf', ?, ?, 'replace', ?, ?, ?)
+    `).run(reportId, saved.storedName, saved.originalName, user.id, uploadedAt, '标准规范表头上传 PDF');
+    insertReportVersion(reportId, 'pdf', saved.storedName, saved.originalName, 'create', user.id, uploadedAt, '标准规范表头上传 PDF');
+    logOperation(user, '上传标准规范 PDF', 'report', reportId, reportName, saved.originalName);
+    db.exec('COMMIT;');
+    sendJson(res, 200, { report: getReport(reportId) });
+  } catch (error) {
+    try { db.exec('ROLLBACK;'); } catch (_) {}
+    if (saved?.fullPath) {
+      try { fs.unlinkSync(saved.fullPath); } catch (_) {}
+    }
+    throw error;
+  }
+}
+
+async function handleSoftwareUpload(req, res, user) {
+  const buffer = await readRequestBody(req, MAX_UPLOAD_BYTES);
+  const form = parseMultipart(req, buffer);
+  const file = form.files.softwareFile;
+  const categoryId = nullableInt(form.fields.categoryId);
+  if (!categoryId) throw publicError(400, '请先打开软件下载分类');
+  if (!file) throw publicError(400, '请选择要上传的软件文件');
+
+  const category = db.prepare("SELECT * FROM categories WHERE id = ? AND template_type = 'auxiliary' AND name = '软件下载'").get(categoryId);
+  if (!category) throw publicError(400, '只能在辅助检测的软件下载栏目上传');
+
+  const originalName = path.basename(file.filename);
+  const softwareName = cleanText(path.basename(originalName, path.extname(originalName))) || '未命名软件';
+  let saved = null;
+  const uploadedAt = now();
+  try {
+    saved = saveUploadedFile(file, 'software', softwareName);
+    db.exec('BEGIN;');
+    const result = db.prepare(`
+      INSERT INTO reports (name, template_type, category_id, remarks, software_file_name, software_original_name,
+        uploaded_by, uploaded_at, created_at, updated_at)
+      VALUES (?, 'auxiliary', ?, '', ?, ?, ?, ?, ?, ?)
+    `).run(softwareName, categoryId, saved.storedName, saved.originalName, user.id, uploadedAt, uploadedAt, uploadedAt);
+    const reportId = Number(result.lastInsertRowid);
+    logOperation(user, '上传软件下载', 'report', reportId, softwareName, saved.originalName);
+    db.exec('COMMIT;');
+    sendJson(res, 200, { report: getReport(reportId) });
+  } catch (error) {
+    try { db.exec('ROLLBACK;'); } catch (_) {}
+    if (saved?.fullPath) { try { fs.unlinkSync(saved.fullPath); } catch (_) {} }
     throw error;
   }
 }
@@ -1315,7 +2401,7 @@ async function handleDownload(req, res, pathname) {
   const user = requireUser(req, res);
   if (!user) return;
 
-  const match = pathname.match(/^\/download\/(\d+)\/(word|pdf|excel)$/);
+  const match = pathname.match(/^\/download\/(\d+)\/(word|pdf|excel|software)$/);
   if (!match) {
     sendJson(res, 404, { message: '没有找到下载文件' });
     return;
@@ -1336,7 +2422,8 @@ async function handleDownload(req, res, pathname) {
   const fileColumns = {
     word: ['word_file_name', 'word_original_name'],
     pdf: ['pdf_file_name', 'pdf_original_name'],
-    excel: ['excel_file_name', 'excel_original_name']
+    excel: ['excel_file_name', 'excel_original_name'],
+    software: ['software_file_name', 'software_original_name']
   };
   const [storedColumn, originalColumn] = fileColumns[fileType];
   const storedName = row[storedColumn];
@@ -1355,12 +2442,14 @@ async function handleDownload(req, res, pathname) {
   const downloadedAt = now();
   db.prepare('UPDATE reports SET last_download_by = ?, last_download_at = ?, updated_at = ? WHERE id = ?')
     .run(user.id, downloadedAt, downloadedAt, reportId);
-  db.prepare('INSERT INTO download_records (report_id, file_type, downloaded_by, downloaded_at) VALUES (?, ?, ?, ?)')
-    .run(reportId, fileType, user.id, downloadedAt);
+  if (fileType !== 'software') {
+    db.prepare('INSERT INTO download_records (report_id, file_type, downloaded_by, downloaded_at) VALUES (?, ?, ?, ?)')
+      .run(reportId, fileType, user.id, downloadedAt);
+  }
   logOperation(user, '下载模板', 'report', reportId, row.name, `${fileTypeNameForStoredFile(fileType)}：${originalName || storedName}`);
 
   res.writeHead(200, {
-    'Content-Type': contentTypeForFile(fileType),
+    'Content-Type': fileType === 'software' ? mimeType(filePath) : contentTypeForFile(fileType),
     'Content-Length': fs.statSync(filePath).size,
     'Content-Disposition': contentDisposition(originalName || storedName)
   });
@@ -1406,6 +2495,219 @@ async function handlePreview(req, res, pathname) {
     'Cache-Control': 'no-cache'
   });
   fs.createReadStream(filePath).pipe(res);
+}
+
+async function handleVideoStream(req, res, pathname) {
+  const user = requireUser(req, res);
+  if (!user) return;
+  if (!canSeeTemplateType(user, 'video')) {
+    sendJson(res, 403, { message: '你没有权限观看检测视频' });
+    return;
+  }
+
+  const match = pathname.match(/^\/videos\/(\d+)(?:\/download)?$/);
+  if (!match) {
+    sendJson(res, 404, { message: '没有找到这个视频' });
+    return;
+  }
+  const isDownload = pathname.endsWith('/download');
+
+  const video = db.prepare('SELECT * FROM training_videos WHERE id = ? AND active = 1').get(Number(match[1]));
+  if (!video) {
+    sendJson(res, 404, { message: '没有找到这个视频' });
+    return;
+  }
+
+  const filePath = resolveVideoPath(video.file_name);
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    sendJson(res, 404, { message: '视频文件不在电脑里，请联系管理员检查视频目录' });
+    return;
+  }
+
+  const stat = fs.statSync(filePath);
+  const range = req.headers.range;
+  const contentType = videoMimeType(filePath);
+  const originalName = path.basename(video.file_name);
+  if (isDownload) {
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': stat.size,
+      'Content-Disposition': contentDisposition(originalName),
+      'Cache-Control': 'no-cache'
+    });
+    fs.createReadStream(filePath, { highWaterMark: VIDEO_STREAM_CHUNK_BYTES }).pipe(res);
+    return;
+  }
+
+  if (!range) {
+    res.writeHead(200, {
+      'Content-Type': contentType,
+      'Content-Length': stat.size,
+      'Accept-Ranges': 'bytes',
+      'Content-Disposition': inlineDisposition(originalName),
+      'Cache-Control': 'no-cache'
+    });
+    fs.createReadStream(filePath, { highWaterMark: VIDEO_STREAM_CHUNK_BYTES }).pipe(res);
+    return;
+  }
+
+  const rangeMatch = String(range).match(/bytes=(\d*)-(\d*)/);
+  if (!rangeMatch) {
+    res.writeHead(416, { 'Content-Range': `bytes */${stat.size}` });
+    res.end();
+    return;
+  }
+
+  const start = rangeMatch[1] ? Number(rangeMatch[1]) : 0;
+  const end = rangeMatch[2] ? Number(rangeMatch[2]) : stat.size - 1;
+  if (!Number.isInteger(start) || !Number.isInteger(end) || start > end || end >= stat.size) {
+    res.writeHead(416, { 'Content-Range': `bytes */${stat.size}` });
+    res.end();
+    return;
+  }
+
+  res.writeHead(206, {
+    'Content-Type': contentType,
+    'Content-Length': end - start + 1,
+    'Content-Range': `bytes ${start}-${end}/${stat.size}`,
+    'Accept-Ranges': 'bytes',
+    'Cache-Control': 'no-cache'
+  });
+  fs.createReadStream(filePath, { start, end, highWaterMark: VIDEO_STREAM_CHUNK_BYTES }).pipe(res);
+}
+
+function listTrainingVideos() {
+  return db.prepare(`
+    SELECT v.*, u.display_name AS created_by_name
+    FROM training_videos v
+    LEFT JOIN users u ON u.id = v.created_by
+    WHERE v.active = 1
+  `).all()
+    .map(publicTrainingVideo)
+    .sort(compareTrainingVideos);
+}
+
+function compareTrainingVideos(a, b) {
+  return String(a.category || '').localeCompare(String(b.category || ''), 'zh-CN', { numeric: true })
+    || String(a.title || '').localeCompare(String(b.title || ''), 'zh-CN', { numeric: true })
+    || String(a.fileName || '').localeCompare(String(b.fileName || ''), 'zh-CN', { numeric: true })
+    || Number(a.id || 0) - Number(b.id || 0);
+}
+
+function createTrainingVideo(body, user) {
+  const next = normalizeTrainingVideoInput(body);
+  const timestamp = now();
+  const result = db.prepare(`
+    INSERT INTO training_videos (title, category, lecturer, file_name, remarks, active, created_by, created_at, updated_at)
+    VALUES (?, ?, ?, ?, ?, 1, ?, ?, ?)
+  `).run(next.title, next.category, next.lecturer, next.fileName, next.remarks, user.id, timestamp, timestamp);
+  const video = getTrainingVideo(Number(result.lastInsertRowid));
+  logOperation(user, '新增检测视频', 'training_video', video.id, video.title, video.fileName);
+  return video;
+}
+
+function updateTrainingVideo(id, body, user) {
+  const existing = db.prepare('SELECT * FROM training_videos WHERE id = ?').get(id);
+  if (!existing) throw publicError(404, '没有找到这个视频');
+  const next = normalizeTrainingVideoInput({ ...existing, ...body }, existing);
+  const active = body.active === undefined ? existing.active : (body.active ? 1 : 0);
+  db.prepare(`
+    UPDATE training_videos
+    SET title = ?, category = ?, lecturer = ?, file_name = ?, remarks = ?, active = ?, updated_at = ?
+    WHERE id = ?
+  `).run(next.title, next.category, next.lecturer, next.fileName, next.remarks, active, now(), id);
+  const video = getTrainingVideo(id, true);
+  logOperation(user, active ? '修改检测视频' : '停用检测视频', 'training_video', id, video.title, video.fileName);
+  return video;
+}
+
+function getTrainingVideo(id, includeInactive = false) {
+  const row = db.prepare(`
+    SELECT v.*, u.display_name AS created_by_name
+    FROM training_videos v
+    LEFT JOIN users u ON u.id = v.created_by
+    WHERE v.id = ? ${includeInactive ? '' : 'AND v.active = 1'}
+  `).get(id);
+  if (!row) throw publicError(404, '没有找到这个视频');
+  return publicTrainingVideo(row);
+}
+
+function normalizeTrainingVideoInput(body, existing = null) {
+  const title = cleanText(body.title || existing?.title);
+  const category = cleanText(body.category || existing?.category || '检测培训');
+  const lecturer = cleanText(body.lecturer || existing?.lecturer || '');
+  const fileName = preferSmoothVideoFileName(normalizeVideoFileName(body.fileName || body.file_name || existing?.file_name));
+  const remarks = cleanText(body.remarks || existing?.remarks || '');
+  if (!title) throw publicError(400, '请填写课程名称');
+  if (!fileName) throw publicError(400, '请填写视频文件名');
+  const filePath = resolveVideoPath(fileName);
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    throw publicError(400, `视频文件不存在，请先放到：${VIDEO_DIR}`);
+  }
+  return { title, category, lecturer, fileName, remarks };
+}
+
+function publicTrainingVideo(row) {
+  return {
+    id: row.id,
+    title: row.title,
+    category: row.category || '',
+    lecturer: row.lecturer || '',
+    fileName: row.file_name,
+    remarks: row.remarks || '',
+    active: Boolean(row.active),
+    createdByName: row.created_by_name || '',
+    createdAt: row.created_at,
+    updatedAt: row.updated_at
+  };
+}
+
+function normalizeVideoFileName(value) {
+  const raw = cleanText(value).replace(/\\/g, '/');
+  if (!raw || raw.includes('\0') || path.isAbsolute(raw)) return '';
+  const normalized = path.posix.normalize(raw);
+  if (normalized === '.' || normalized.startsWith('../') || normalized === '..') return '';
+  const ext = path.extname(normalized).toLowerCase();
+  if (!['.mp4', '.webm', '.ogg', '.m4v', '.mov'].includes(ext)) {
+    throw publicError(400, '视频格式建议使用 mp4，当前仅支持 mp4、webm、ogg、m4v、mov');
+  }
+  return normalized;
+}
+
+function preferSmoothVideoFileName(fileName) {
+  if (!fileName) return '';
+  const parts = fileName.split('/');
+  const baseName = parts.pop();
+  const folder = parts.join('/');
+  if (!folder || folder.endsWith('-\u6d41\u7545\u7248') || folder.endsWith('-smooth')) return fileName;
+  const smoothFileName = `${folder}-\u6d41\u7545\u7248/${baseName}`;
+  try {
+    if (fs.existsSync(resolveVideoPath(smoothFileName))) return smoothFileName;
+  } catch (_) {
+    // Keep the original path if the smooth candidate is not a valid video path.
+  }
+  return fileName;
+}
+
+function resolveVideoPath(fileName) {
+  const normalized = normalizeVideoFileName(fileName);
+  const filePath = path.normalize(path.join(VIDEO_DIR, normalized));
+  const relative = path.relative(VIDEO_DIR, filePath);
+  if (relative.startsWith('..') || path.isAbsolute(relative)) {
+    throw publicError(400, '视频文件路径不正确');
+  }
+  return filePath;
+}
+
+function videoMimeType(filePath) {
+  const ext = path.extname(filePath).toLowerCase();
+  return {
+    '.mp4': 'video/mp4',
+    '.m4v': 'video/mp4',
+    '.webm': 'video/webm',
+    '.ogg': 'video/ogg',
+    '.mov': 'video/quicktime'
+  }[ext] || 'application/octet-stream';
 }
 
 function createCategory(body, user) {
@@ -1467,15 +2769,23 @@ function deleteCategory(id, user) {
 
   const reportCount = db.prepare('SELECT COUNT(*) AS count FROM reports WHERE category_id = ?').get(id).count;
   if (reportCount > 0) throw publicError(400, '这个分类下面已有模板，不能删除');
+  if (existing.template_type === 'video' && existing.name === '检测视频') {
+    const videoCount = db.prepare('SELECT COUNT(*) AS count FROM training_videos WHERE active = 1').get().count;
+    if (videoCount > 0) throw publicError(400, '检测视频分类下面已有视频，不能删除');
+  }
 
   db.prepare('DELETE FROM categories WHERE id = ?').run(id);
   logOperation(user, '删除分类', 'category', id, existing.name, `模板类型：${existing.template_type}`);
 }
 
 function categoryHasContent(id) {
+  const category = db.prepare('SELECT template_type, name FROM categories WHERE id = ?').get(id);
   const childCount = db.prepare('SELECT COUNT(*) AS count FROM categories WHERE parent_id = ?').get(id).count;
   const reportCount = db.prepare('SELECT COUNT(*) AS count FROM reports WHERE category_id = ?').get(id).count;
-  return childCount > 0 || reportCount > 0;
+  const videoCount = category?.template_type === 'video' && category.name === '检测视频'
+    ? db.prepare('SELECT COUNT(*) AS count FROM training_videos WHERE active = 1').get().count
+    : 0;
+  return childCount > 0 || reportCount > 0 || videoCount > 0;
 }
 
 function validateCategoryForTemplate(categoryId, templateType) {
@@ -1876,6 +3186,15 @@ function serveStaticFile(res, pathname) {
     return;
   }
 
+  serveAbsoluteFile(res, filePath);
+}
+
+function serveAbsoluteFile(res, filePath) {
+  if (!fs.existsSync(filePath) || !fs.statSync(filePath).isFile()) {
+    res.writeHead(404);
+    res.end('Not found');
+    return;
+  }
   res.writeHead(200, {
     'Content-Type': mimeType(filePath),
     'Cache-Control': 'no-cache'
@@ -1889,6 +3208,8 @@ function mimeType(filePath) {
     '.html': 'text/html; charset=utf-8',
     '.css': 'text/css; charset=utf-8',
     '.js': 'application/javascript; charset=utf-8',
+    '.xls': 'application/vnd.ms-excel',
+    '.xlsx': 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet',
     '.json': 'application/json; charset=utf-8',
     '.png': 'image/png',
     '.jpg': 'image/jpeg',
@@ -1916,20 +3237,31 @@ function readJson(req) {
 
 function readRequestBody(req, limit) {
   return new Promise((resolve, reject) => {
+    const declaredLength = Number(req.headers['content-length'] || 0);
+    if (Number.isFinite(declaredLength) && declaredLength > limit) {
+      req.resume();
+      reject(publicError(413, `文件太大，单次上传最多 ${Math.floor(limit / 1024 / 1024)}MB`));
+      return;
+    }
+
     const chunks = [];
     let total = 0;
+    let exceeded = false;
 
     req.on('data', (chunk) => {
+      if (exceeded) return;
       total += chunk.length;
       if (total > limit) {
-        reject(publicError(413, '文件太大，单次上传最多 80MB'));
-        req.destroy();
+        exceeded = true;
+        reject(publicError(413, `文件太大，单次上传最多 ${Math.floor(limit / 1024 / 1024)}MB`));
         return;
       }
       chunks.push(chunk);
     });
 
-    req.on('end', () => resolve(Buffer.concat(chunks)));
+    req.on('end', () => {
+      if (!exceeded) resolve(Buffer.concat(chunks));
+    });
     req.on('error', reject);
   });
 }
@@ -2006,7 +3338,7 @@ function isAdminRole(role) {
 }
 
 function visibleTemplateTypes(user) {
-  const allTypes = ['entrust', 'report', 'auxiliary', 'system'];
+  const allTypes = ['entrust', 'report', 'auxiliary', 'system', 'video', 'project', 'instrument', 'tool'];
   if (!user || isAdminRole(user.role)) return allTypes;
   const scope = normalizeUserScope(user.scope);
   return scope === 'all' ? allTypes : [scope];
