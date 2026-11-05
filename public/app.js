@@ -912,9 +912,10 @@ function defaultFunanTask() {
     sendDept: '综合部',
     receiveDept: '检测部',
     sender: '李晓东',
-    samplingLocation: '',
+    samplingLocation: '现场',
     samplerWitness: '',
-    ...saved
+    ...saved,
+    samplingLocation: String(saved.samplingLocation || '').trim() || '现场'
   };
 }
 
