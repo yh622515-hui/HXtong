@@ -3105,6 +3105,14 @@ body:not([data-role="superadmin"]) .super-only {
 }
 
 .tree-row.selected { font-weight: 700; }
+.tree-row.selected,
+.tree-row.selected:hover {
+  background: #087a63;
+  color: #fff;
+}
+
+.tree-row.selected .plus,
+.tree-row.selected .count { color: rgba(255, 255, 255, 0.86); }
 .content { padding: 24px; }
 .home-hero-banner { display: none; }
 
