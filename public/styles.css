@@ -716,6 +716,25 @@ body:not([data-role="superadmin"]) .super-only {
   vertical-align: middle;
 }
 
+.video-table th,
+.video-table td {
+  padding: 7px 10px;
+}
+
+.video-table .report-name {
+  line-height: 1.35;
+}
+
+.video-table .muted {
+  font-size: 12px;
+  line-height: 1.25;
+}
+
+.video-table .mini,
+.video-table .file-btn {
+  padding: 6px 10px;
+}
+
 .video-empty {
   line-height: 1.7;
 }

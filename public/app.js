@@ -1217,9 +1217,7 @@ function renderVideos() {
       <thead>
         <tr>
           <th>课程名称</th>
-          <th>分类</th>
-          <th>讲师/来源</th>
-          <th>视频文件</th>
+          <th>讲师</th>
           <th>登记信息</th>
           <th>备注</th>
           <th>操作</th>
@@ -1239,9 +1237,7 @@ function renderVideoRow(video) {
         <div class="report-name">${escapeHtml(video.title)}</div>
         <div class="muted">编号：${video.id}</div>
       </td>
-      <td data-label="分类">${escapeHtml(video.category || '未分类')}</td>
-      <td data-label="讲师/来源">${escapeHtml(video.lecturer || '暂无')}</td>
-      <td data-label="视频文件"><span class="muted">${escapeHtml(video.fileName)}</span></td>
+      <td data-label="讲师">${escapeHtml(video.lecturer || '暂无')}</td>
       <td data-label="登记信息">
         <div>${escapeHtml(video.createdByName || '暂无')}</div>
         <div class="muted">${formatTime(video.updatedAt || video.createdAt)}</div>
