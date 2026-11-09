@@ -65,6 +65,18 @@ function transcode(inputPath, outputPath) {
   if (result.status !== 0) throw new Error(`ffmpeg failed: ${inputPath}`);
 }
 
+function isCompleteWebMp4(filePath) {
+  if (!fs.existsSync(filePath) || fs.statSync(filePath).size < 1024) return false;
+  const fd = fs.openSync(filePath, 'r');
+  try {
+    const buffer = Buffer.alloc(Math.min(2 * 1024 * 1024, fs.statSync(filePath).size));
+    fs.readSync(fd, buffer, 0, buffer.length, 0);
+    return buffer.includes(Buffer.from('moov'));
+  } finally {
+    fs.closeSync(fd);
+  }
+}
+
 function naturalCompare(a, b) {
   return a.localeCompare(b, 'zh-CN', { numeric: true, sensitivity: 'base' });
 }
@@ -80,9 +92,24 @@ const isInsideVideoDir = sourceInsideVideoDir !== ''
 const smoothFolder = isInsideVideoDir
   ? path.join(path.dirname(resolvedSource), `${folderName}${SMOOTH_SUFFIX}`)
   : path.join(VIDEO_DIR, category, `${folderName}${SMOOTH_SUFFIX}`);
-const files = fs.readdirSync(resolvedSource)
-  .filter((name) => VIDEO_EXTS.has(path.extname(name).toLowerCase()))
-  .sort(naturalCompare);
+function listVideoFiles(folder) {
+  const found = [];
+  for (const entry of fs.readdirSync(folder, { withFileTypes: true })) {
+    const fullPath = path.join(folder, entry.name);
+    if (entry.isDirectory()) found.push(...listVideoFiles(fullPath));
+    else if (entry.isFile() && VIDEO_EXTS.has(path.extname(entry.name).toLowerCase())) {
+      found.push({
+        fileName: entry.name,
+        inputPath: fullPath,
+        relativePath: path.relative(resolvedSource, fullPath)
+      });
+    }
+  }
+  return found;
+}
+
+const files = listVideoFiles(resolvedSource)
+  .sort((a, b) => naturalCompare(a.relativePath, b.relativePath));
 
 const db = new DatabaseSync(DB_PATH);
 const timestamp = new Date().toISOString();
@@ -100,10 +127,10 @@ try {
     )
   `).run(category, timestamp, timestamp, category);
 
-  for (const fileName of files) {
-    const inputPath = path.join(resolvedSource, fileName);
+  for (const file of files) {
+    const { fileName, inputPath } = file;
     const outputPath = path.join(smoothFolder, `${titleFromFile(fileName)}.mp4`);
-    if (!fs.existsSync(outputPath)) {
+    if (!isCompleteWebMp4(outputPath)) {
       db.exec('COMMIT;');
       transcode(inputPath, outputPath);
       converted += 1;
