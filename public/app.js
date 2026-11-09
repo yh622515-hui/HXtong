@@ -1213,44 +1213,35 @@ function renderVideos() {
   }
 
   els.reportList.innerHTML = `
-    <table class="report-table video-table">
-      <thead>
-        <tr>
-          <th>课程名称</th>
-          <th>讲师</th>
-          <th>登记信息</th>
-          <th>备注</th>
-          <th>操作</th>
-        </tr>
-      </thead>
-      <tbody>
-        ${filtered.map(renderVideoRow).join('')}
-      </tbody>
-    </table>
+    <div class="video-library-list">
+      ${filtered.map((video, index) => renderVideoRow(video, index)).join('')}
+    </div>
   `;
 }
 
-function renderVideoRow(video) {
+function renderVideoRow(video, index) {
+  const teacher = video.lecturer || '暂无讲师';
+  const updated = formatTime(video.updatedAt || video.createdAt);
+  const titleSequence = String(video.title || '').match(/^\d+/)?.[0];
+  const displaySequence = titleSequence || String(index + 1).padStart(2, '0');
+  const detailParts = [`讲师：${teacher}`, updated ? `更新：${updated}` : '', video.remarks || ''].filter(Boolean);
   return `
-    <tr>
-      <td data-label="课程名称">
-        <div class="report-name">${escapeHtml(video.title)}</div>
-        <div class="muted">编号：${video.id}</div>
-      </td>
-      <td data-label="讲师">${escapeHtml(video.lecturer || '暂无')}</td>
-      <td data-label="登记信息">
-        <div>${escapeHtml(video.createdByName || '暂无')}</div>
-        <div class="muted">${formatTime(video.updatedAt || video.createdAt)}</div>
-      </td>
-      <td data-label="备注">${escapeHtml(video.remarks || '')}</td>
-      <td data-label="操作">
-        <div class="row-actions">
-          <button class="mini primary-mini" data-action="play-video" data-video-id="${video.id}" type="button">播放</button>
-          <a class="mini file-btn" href="/videos/${video.id}/download">下载</a>
-          ${canManageTemplates() ? `<button class="mini" data-action="edit-video" data-video-id="${video.id}" type="button">编辑</button>` : ''}
-        </div>
-      </td>
-    </tr>
+    <article class="video-course-row">
+      <div class="video-course-index" aria-hidden="true">${escapeHtml(displaySequence)}</div>
+      <div class="video-course-main">
+        <h3>${escapeHtml(video.title)}</h3>
+        <div class="video-course-meta">${detailParts.map((item) => `<span>${escapeHtml(item)}</span>`).join('')}</div>
+      </div>
+      <div class="video-course-actions">
+        ${canManageTemplates() ? `<button class="video-edit-button" data-action="edit-video" data-video-id="${video.id}" type="button">编辑</button>` : ''}
+        <a class="video-download-button" href="/videos/${video.id}/download" title="下载课程" aria-label="下载 ${escapeAttribute(video.title)}">
+          <span class="video-download-icon" aria-hidden="true"></span><span>下载</span>
+        </a>
+        <button class="video-play-button" data-action="play-video" data-video-id="${video.id}" type="button" title="播放课程" aria-label="播放 ${escapeAttribute(video.title)}">
+          <span class="video-play-icon" aria-hidden="true"></span><span>播放</span>
+        </button>
+      </div>
+    </article>
   `;
 }
 

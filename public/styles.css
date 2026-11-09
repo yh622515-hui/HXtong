@@ -712,28 +712,141 @@ body:not([data-role="superadmin"]) .super-only {
   background: #f8fcfb;
 }
 
-.video-table td {
-  vertical-align: middle;
+.video-library-list { background: #fff; }
+
+.video-course-row {
+  display: grid;
+  grid-template-columns: 46px minmax(0, 1fr) auto;
+  gap: 16px;
+  align-items: center;
+  min-height: 64px;
+  padding: 9px 16px;
+  border-bottom: 1px solid #e8eaed;
+  transition: background-color 0.15s ease;
 }
 
-.video-table th,
-.video-table td {
-  padding: 7px 10px;
+.video-course-row:last-child { border-bottom: 0; }
+.video-course-row:hover { background: #f8f9fa; }
+
+.video-course-index {
+  color: #8a8a8e;
+  font-size: 14px;
+  font-variant-numeric: tabular-nums;
+  text-align: center;
 }
 
-.video-table .report-name {
-  line-height: 1.35;
+.video-course-main { min-width: 0; }
+
+.video-course-main h3 {
+  margin: 0;
+  color: #1d1d1f;
+  font-size: 16px;
+  font-weight: 600;
+  line-height: 1.4;
 }
 
-.video-table .muted {
+.video-course-meta {
+  display: flex;
+  flex-wrap: wrap;
+  gap: 4px 14px;
+  margin-top: 5px;
+  color: #6e6e73;
   font-size: 12px;
-  line-height: 1.25;
+  line-height: 1.4;
 }
 
-.video-table .mini,
-.video-table .file-btn {
-  padding: 6px 10px;
+.video-course-meta span + span::before {
+  content: "·";
+  margin-right: 14px;
+  color: #c2c2c5;
 }
+
+.video-course-actions {
+  display: flex;
+  align-items: center;
+  justify-content: flex-end;
+  gap: 8px;
+}
+
+.video-play-button,
+.video-download-button,
+.video-edit-button {
+  min-height: 34px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  gap: 7px;
+  border-radius: 18px;
+  padding: 6px 13px;
+  text-decoration: none;
+  font-size: 13px;
+  font-weight: 600;
+  white-space: nowrap;
+  transition: transform 0.15s ease, background-color 0.15s ease, border-color 0.15s ease;
+}
+
+.video-play-button {
+  border: 1px solid #087a63;
+  background: #087a63;
+  color: #fff;
+}
+
+.video-play-button:hover { background: #05624f; transform: translateY(-1px); }
+
+.video-play-icon {
+  width: 0;
+  height: 0;
+  margin-left: 2px;
+  border-top: 5px solid transparent;
+  border-bottom: 5px solid transparent;
+  border-left: 8px solid currentColor;
+}
+
+.video-download-button {
+  border: 1px solid #d2d2d7;
+  background: #fff;
+  color: #1d1d1f;
+}
+
+.video-download-button:hover { border-color: #a7a7ab; background: #f5f5f7; }
+
+.video-download-icon {
+  position: relative;
+  width: 13px;
+  height: 14px;
+  border-bottom: 1.5px solid currentColor;
+}
+
+.video-download-icon::before {
+  content: "";
+  position: absolute;
+  left: 6px;
+  top: 0;
+  width: 1.5px;
+  height: 9px;
+  background: currentColor;
+}
+
+.video-download-icon::after {
+  content: "";
+  position: absolute;
+  left: 3px;
+  top: 5px;
+  width: 6px;
+  height: 6px;
+  border-right: 1.5px solid currentColor;
+  border-bottom: 1.5px solid currentColor;
+  transform: rotate(45deg);
+}
+
+.video-edit-button {
+  border: 0;
+  background: transparent;
+  color: #6e6e73;
+  padding-inline: 8px;
+}
+
+.video-edit-button:hover { background: #f0f0f2; color: #1d1d1f; }
 
 .video-empty {
   line-height: 1.7;
@@ -935,24 +1048,43 @@ body:not([data-role="superadmin"]) .super-only {
 
 .video-player-wrap {
   display: grid;
-  gap: 12px;
+  gap: 14px;
+  margin-top: 18px;
+  padding: 14px;
+  border-radius: 14px;
+  background: #000;
 }
 
 .video-player-wrap video {
   width: 100%;
   max-height: 68vh;
   background: #101828;
-  border-radius: 8px;
+  border-radius: 10px;
 }
 
 .speed-row {
   display: flex;
   flex-wrap: wrap;
-  gap: 8px;
+  gap: 4px;
   align-items: center;
+  justify-content: center;
+  padding: 4px;
+  border-radius: 18px;
+  background: #1d1d1f;
 }
 
-.speed-row .active,
+.speed-row .mini {
+  min-width: 56px;
+  border: 0;
+  border-radius: 14px;
+  padding: 6px 10px;
+  background: transparent;
+  color: #a1a1a6;
+}
+
+.speed-row .mini:hover { background: #2c2c2e; color: #fff; }
+.speed-row .mini.active { background: #fff; color: #1d1d1f; }
+
 .primary-mini {
   color: #fff;
   border-color: var(--primary);
@@ -3192,6 +3324,22 @@ body:not([data-role="superadmin"]) .super-only {
   .topbar { padding: 12px 16px; }
   .content { padding: 16px; }
   .sidebar { padding: 12px; }
+
+  .video-course-row {
+    grid-template-columns: 34px minmax(0, 1fr);
+    gap: 10px;
+    padding: 14px 12px;
+  }
+
+  .video-course-actions {
+    grid-column: 2;
+    justify-content: flex-start;
+    margin-top: 4px;
+  }
+
+  .video-course-meta { display: grid; gap: 2px; }
+  .video-course-meta span + span::before { display: none; }
+  .video-play-button, .video-download-button { flex: 1; max-width: 132px; }
 }
 
 @media (max-width: 860px) {
