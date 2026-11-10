@@ -32,7 +32,7 @@ const ENTRUST_SAMPLES = [
     name: '砂',
     spec: '(0-5)mm',
     quantity: '150kg',
-    model: '/',
+    model: '—',
     origin: '河南罗山',
     category: '委托检测',
     usage: '路基',
@@ -47,7 +47,7 @@ const ENTRUST_SAMPLES = [
     name: '碎石',
     spec: '(5-31.5)mm',
     quantity: '150kg',
-    model: '/',
+    model: '—',
     origin: '河南乐润',
     category: '委托检测',
     usage: '路基',
@@ -149,6 +149,7 @@ function cacheElements() {
     loginMessage: document.getElementById('loginMessage'),
     registerMessage: document.getElementById('registerMessage'),
     currentUser: document.getElementById('currentUser'),
+    topMoreMenu: document.getElementById('topMoreMenu'),
     logoutBtn: document.getElementById('logoutBtn'),
     adminBtn: document.getElementById('adminBtn'),
     operationLogBtn: document.getElementById('operationLogBtn'),
@@ -163,8 +164,12 @@ function cacheElements() {
     searchInput: document.getElementById('searchInput'),
     searchBtn: document.getElementById('searchBtn'),
     clearSearchBtn: document.getElementById('clearSearchBtn'),
+    fileFilterLabel: document.getElementById('fileFilterLabel'),
     fileFilter: document.getElementById('fileFilter'),
     quickFilter: document.getElementById('quickFilter'),
+    standardPageAction: document.getElementById('standardPageAction'),
+    standardPageUploadBtn: document.getElementById('standardPageUploadBtn'),
+    standardPageUploadInput: document.getElementById('standardPageUploadInput'),
     reportList: document.getElementById('reportList'),
     previewModal: document.getElementById('previewModal'),
     closePreviewBtn: document.getElementById('closePreviewBtn'),
@@ -222,6 +227,7 @@ function cacheElements() {
     userForm: document.getElementById('userForm'),
     userList: document.getElementById('userList'),
     inactiveReportList: document.getElementById('inactiveReportList'),
+    rowActionMenu: document.getElementById('rowActionMenu'),
     toast: document.getElementById('toast')
   });
 }
@@ -240,6 +246,8 @@ function bindEvents() {
     if (event.key === 'Enter') applySearch();
   });
   els.searchBtn.addEventListener('click', applySearch);
+  els.standardPageUploadBtn.addEventListener('click', () => els.standardPageUploadInput.click());
+  els.standardPageUploadInput.addEventListener('change', handleAutoPdfFileChange);
   els.clearSearchBtn.addEventListener('click', () => {
     state.search = '';
     state.searchDraft = '';
@@ -259,8 +267,16 @@ function bindEvents() {
     renderReports();
   });
 
-  els.adminBtn.addEventListener('click', openAdmin);
-  els.operationLogBtn.addEventListener('click', showOperationLogs);
+  els.adminBtn.addEventListener('click', () => {
+    els.topMoreMenu.removeAttribute('open');
+    openAdmin();
+  });
+  els.operationLogBtn.addEventListener('click', async () => {
+    els.topMoreMenu.removeAttribute('open');
+    await showOperationLogs();
+  });
+  els.rowActionMenu.addEventListener('click', handleRowActionMenuClick);
+  document.addEventListener('click', handleGlobalMenuClose);
   els.exportBtn.addEventListener('click', handleExport);
   els.closePreviewBtn.addEventListener('click', closePreview);
   bindBackdropClose(els.previewModal, closePreview);
@@ -399,6 +415,7 @@ async function handleLogout() {
 
 function showLogin() {
   document.body.removeAttribute('data-role');
+  document.body.classList.remove('standard-download-view', 'entrust-template-view', 'video-list-view');
   resetBlockingOverlays();
   els.loginView.hidden = false;
   els.appView.hidden = true;
@@ -554,9 +571,11 @@ function renderCategories() {
     button.addEventListener('click', (event) => {
       const templateToggle = event.target.dataset.templateToggle;
       if (templateToggle) {
-        if (state.expandedTemplateTypes.has(templateToggle)) state.expandedTemplateTypes.delete(templateToggle);
-        else state.expandedTemplateTypes.add(templateToggle);
+        const opening = !state.expandedTemplateTypes.has(templateToggle);
+        state.expandedTemplateTypes.clear();
+        if (opening) state.expandedTemplateTypes.add(templateToggle);
         renderCategories();
+        if (opening) scrollTreeRowIntoView(`[data-template-root="${templateToggle}"]`);
         return;
       }
 
@@ -570,13 +589,44 @@ function renderCategories() {
       const categoryId = Number(button.dataset.categoryId);
       const templateType = button.dataset.templateType || state.selectedTemplateType;
       if (toggleId) {
-        if (state.expanded.has(categoryId)) state.expanded.delete(categoryId);
-        else state.expanded.add(categoryId);
+        const opening = !state.expanded.has(categoryId);
+        if (opening) state.expanded.add(categoryId);
+        else state.expanded.delete(categoryId);
         renderCategories();
+        if (opening) scrollTreeRowIntoView(`[data-category-id="${categoryId}"]`);
         return;
       }
       selectCategory(templateType, categoryId);
     });
+
+    button.addEventListener('dblclick', (event) => {
+      if (event.target.closest('.plus')) return;
+      event.preventDefault();
+      const templateRoot = button.dataset.templateRoot;
+      if (templateRoot) {
+        const opening = !state.expandedTemplateTypes.has(templateRoot);
+        state.expandedTemplateTypes.clear();
+        if (opening) state.expandedTemplateTypes.add(templateRoot);
+        renderCategories();
+        if (opening) scrollTreeRowIntoView(`[data-template-root="${templateRoot}"]`);
+        return;
+      }
+
+      const toggle = button.querySelector('[data-toggle-id]');
+      if (!toggle) return;
+      const categoryId = Number(button.dataset.categoryId);
+      const opening = !state.expanded.has(categoryId);
+      if (opening) state.expanded.add(categoryId);
+      else state.expanded.delete(categoryId);
+      renderCategories();
+      if (opening) scrollTreeRowIntoView(`[data-category-id="${categoryId}"]`);
+    });
+  });
+}
+
+function scrollTreeRowIntoView(selector) {
+  requestAnimationFrame(() => {
+    els.categoryTree.querySelector(selector)?.scrollIntoView({ block: 'nearest', behavior: 'smooth' });
   });
 }
 
@@ -587,6 +637,21 @@ function renderDashboard() {
 }
 
 function renderReports() {
+  const selectedCategory = state.categories.find((item) => item.id === state.selectedCategoryId);
+  const standardDownloadView = isStandardDownloadCategory(selectedCategory);
+  const entrustTemplateView = state.selectedTemplateType === 'entrust';
+  const videoListView = isVideoCategorySelected();
+  document.body.classList.toggle('standard-download-view', standardDownloadView || entrustTemplateView || videoListView);
+  document.body.classList.toggle('entrust-template-view', entrustTemplateView);
+  document.body.classList.toggle('video-list-view', videoListView);
+  els.standardPageAction.hidden = !standardDownloadView || !canManageTemplates();
+  els.fileFilterLabel.textContent = standardDownloadView || entrustTemplateView ? '类型' : '文件';
+  els.searchInput.placeholder = standardDownloadView
+    ? '搜索标准名称或编号'
+    : videoListView
+      ? '搜索课程名称或讲师'
+      : '搜索名称、分类或备注';
+
   if (state.selectedTemplateType === 'tool') {
     renderCommonTools();
     return;
@@ -600,12 +665,11 @@ function renderReports() {
     return;
   }
 
-  if (isVideoCategorySelected()) {
+  if (videoListView) {
     renderVideos();
     return;
   }
 
-  const selectedCategory = state.categories.find((item) => item.id === state.selectedCategoryId);
   if (selectedCategory?.templateType === 'system' && selectedCategory.name === '标准/一单一库') {
     renderStandardLibraryTool(selectedCategory);
     return;
@@ -629,7 +693,9 @@ function renderReports() {
   const selectedType = TEMPLATE_TYPES.find((item) => item.id === state.selectedTemplateType) || TEMPLATE_TYPES[0];
   els.contentTitle.textContent = selectedCategory ? `${selectedType.label} - ${selectedCategory.name}` : selectedType.label;
   const searchText = state.search ? `，关键词：${state.search}` : '';
-  els.reportCount.textContent = `共 ${filtered.length} 份模板${searchText}`;
+  els.reportCount.textContent = standardDownloadView
+    ? `共 ${filtered.length} 条标准规范${searchText}`
+    : `共 ${filtered.length} 份模板${searchText}`;
 
   if (filtered.length === 0) {
     els.reportList.innerHTML = `
@@ -640,39 +706,138 @@ function renderReports() {
           <span class="muted">点击上传常用软件</span>
         </div>
       ` : ''}
-      <div class="empty">暂无报告</div>
+      ${standardDownloadView ? `
+        <div class="standard-empty-state">
+          <span class="standard-empty-icon" aria-hidden="true"></span>
+          <div>还没有标准规范文件</div>
+          ${canManageTemplates() ? '<button class="standard-page-upload" data-action="auto-upload-pdf" type="button">上传第一份规范</button>' : ''}
+        </div>
+      ` : entrustTemplateView ? '<div class="entrust-empty-state">还没有委托单/任务单模板</div>' : '<div class="empty">—</div>'}
     `;
     return;
   }
 
+  if (entrustTemplateView) {
+    renderEntrustTemplateTable(filtered);
+    return;
+  }
+
   els.reportList.innerHTML = `
-    <table class="report-table">
+    <table class="report-table ${standardDownloadView ? 'standard-download-table' : ''} ${state.selectedTemplateType === 'report' ? 'report-template-table' : ''}">
+      ${standardDownloadView ? `
+        <colgroup>
+          <col class="standard-col-name"><col class="standard-col-download">
+          <col class="standard-col-last-download"><col class="standard-col-actions">
+        </colgroup>
+      ` : ''}
       <thead>
         <tr>
           <th>${isStandardDownloadCategory(selectedCategory) ? '标准规范名称' : '报告名称'}</th>
-          <th>分类</th>
+          ${standardDownloadView ? '' : '<th>分类</th>'}
           <th>下载</th>
-          <th>
+          ${standardDownloadView ? '' : `<th>
             <span class="upload-header-control">上传信息
-              ${isStandardDownloadCategory(selectedCategory) && canManageTemplates() ? `
-                <input data-auto-pdf-file type="file" accept="application/pdf,.pdf" hidden>
-                <button class="header-upload-btn" data-action="auto-upload-pdf" title="选择 PDF 后自动上传" type="button">上传</button>
-              ` : isSoftwareDownloadCategory(selectedCategory) && canManageTemplates() ? `
+              ${isSoftwareDownloadCategory(selectedCategory) && canManageTemplates() ? `
                 <input data-auto-software-file type="file" hidden>
                 <button class="header-upload-btn" data-action="auto-upload-software" title="选择软件后自动上传" type="button">上传</button>
               ` : ''}
             </span>
-          </th>
+          </th>`}
           <th>最后下载</th>
-          <th>备注</th>
+          ${standardDownloadView ? '' : '<th>备注</th>'}
           <th>操作</th>
         </tr>
       </thead>
       <tbody>
-        ${filtered.map(renderReportRow).join('')}
+        ${filtered.map(standardDownloadView ? renderStandardDownloadRow : renderReportRow).join('')}
       </tbody>
     </table>
   `;
+}
+
+function renderEntrustTemplateTable(reports) {
+  els.reportList.innerHTML = `
+    <table class="report-table entrust-template-table">
+      <colgroup>
+        <col class="entrust-col-name"><col class="entrust-col-download">
+        <col class="entrust-col-upload"><col class="entrust-col-last-download"><col class="entrust-col-remarks"><col class="entrust-col-actions">
+      </colgroup>
+      <thead>
+        <tr><th>报告名称</th><th>下载</th><th>上传信息</th><th>最后下载</th><th>备注</th><th>操作</th></tr>
+      </thead>
+      <tbody>${reports.map(renderEntrustTemplateRow).join('')}</tbody>
+    </table>
+  `;
+}
+
+function renderEntrustTemplateRow(report) {
+  const files = [
+    report.hasWord ? `<a class="entrust-file-tag entrust-file-word" href="/download/${report.id}/word">Word</a>` : '',
+    report.hasPdf ? `<a class="entrust-file-tag entrust-file-pdf" href="/download/${report.id}/pdf">PDF</a>` : '',
+    report.hasExcel ? `<a class="entrust-file-tag entrust-file-excel" href="/download/${report.id}/excel">Excel</a>` : ''
+  ].filter(Boolean).join('');
+  return `
+    <tr>
+      <td data-label="报告名称"><div class="entrust-name">${escapeHtml(report.name)}</div><div class="entrust-id">编号：${report.id}</div></td>
+      <td data-label="下载"><div class="entrust-file-actions">${files || '<span class="standard-empty-value">—</span>'}</div></td>
+      <td data-label="上传信息">${entrustPersonTime(report.uploadedByName, report.uploadedAt)}</td>
+      <td data-label="最后下载">${entrustPersonTime(report.lastDownloadByName, report.lastDownloadAt)}</td>
+      <td data-label="备注">${report.remarks ? escapeHtml(report.remarks) : '<span class="standard-empty-value">—</span>'}</td>
+      <td data-label="操作"><div class="entrust-row-actions">
+        <button class="entrust-text-action" data-action="preview" data-report-id="${report.id}" type="button">预览</button><span>｜</span>
+        <button class="entrust-text-action" data-action="fill" data-report-id="${report.id}" onclick="window.openEntrustFormDirect && window.openEntrustFormDirect(this.dataset.reportId)" type="button">填写</button><span>｜</span>
+        <button class="entrust-text-action" data-action="logs" data-report-id="${report.id}" type="button">记录</button><span>｜</span>
+        <button class="entrust-text-action" data-action="versions" data-report-id="${report.id}" type="button">版本</button>
+      </div></td>
+    </tr>
+  `;
+}
+
+function entrustPersonTime(person, value) {
+  if (!person && !value) return '<span class="standard-empty-value">—</span>';
+  return `<div class="entrust-info-date">${escapeHtml(formatStandardTime(value))}</div><div class="entrust-info-person">${escapeHtml(person || '—')}</div>`;
+}
+
+function renderStandardDownloadRow(report) {
+  const fileButtons = [
+    report.hasPdf ? `<a class="standard-file-tag standard-file-pdf" href="/download/${report.id}/pdf">PDF</a>` : '',
+    report.hasWord ? `<a class="standard-file-tag standard-file-word" href="/download/${report.id}/word">Word</a>` : '',
+    report.hasExcel ? `<a class="standard-file-tag standard-file-excel" href="/download/${report.id}/excel">Excel</a>` : ''
+  ].filter(Boolean).join('');
+  const downloadInfo = standardPersonTime(report.lastDownloadByName, report.lastDownloadAt);
+  return `
+    <tr>
+      <td data-label="标准规范名称">
+        <div class="standard-name">${escapeHtml(report.name)}</div>
+        <div class="standard-id">编号：${report.id}</div>
+      </td>
+      <td data-label="下载"><div class="standard-file-actions">${fileButtons || '<span class="standard-empty-value">—</span>'}</div></td>
+      <td data-label="最后下载">${downloadInfo}</td>
+      <td data-label="操作">
+        <div class="standard-row-actions">
+          <button class="standard-text-action" data-action="preview" data-report-id="${report.id}" type="button">预览</button>
+          <span aria-hidden="true">｜</span>
+          <button class="standard-text-action" data-action="logs" data-report-id="${report.id}" type="button">记录</button>
+          <span aria-hidden="true">｜</span>
+          <button class="standard-text-action" data-action="versions" data-report-id="${report.id}" type="button">版本</button>
+        </div>
+      </td>
+    </tr>
+  `;
+}
+
+function standardPersonTime(person, value) {
+  if (!person && !value) return '<span class="standard-empty-value">—</span>';
+  const dateText = formatStandardTime(value);
+  return `<div class="standard-info-primary">${escapeHtml(person || '—')}</div><div class="standard-info-secondary">${escapeHtml(dateText)}</div>`;
+}
+
+function formatStandardTime(value) {
+  if (!value) return '—';
+  const date = new Date(value);
+  if (Number.isNaN(date.getTime())) return '—';
+  const part = (number) => String(number).padStart(2, '0');
+  return `${date.getFullYear()}-${part(date.getMonth() + 1)}-${part(date.getDate())} ${part(date.getHours())}:${part(date.getMinutes())}`;
 }
 
 const COMMON_TOOL_FILES = {
@@ -715,7 +880,7 @@ function renderCommonTools() {
         </article>`;
       }).join('')}
     </div>
-  ` : '<div class="empty">暂无在线工具</div>';
+  ` : '<div class="empty">—</div>';
 }
 
 function renderStandardLibraryTool(category) {
@@ -742,6 +907,7 @@ function renderReportRow(report) {
     softwareButton
   ].filter(Boolean).join('');
 
+  const compactSystemActions = report.templateType === 'system' && canManageTemplates();
   return `
     <tr>
       <td data-label="${report.categoryName === '标准规范下载' ? '标准规范名称' : '报告名称'}">
@@ -751,15 +917,15 @@ function renderReportRow(report) {
       <td data-label="分类">${escapeHtml(report.categoryName)}</td>
       <td data-label="下载">
         <div class="file-actions">
-          ${isCalculator ? '<span class="tool-badge">在线工具</span>' : (fileButtons || '<span class="muted">暂无文件</span>')}
+          ${isCalculator ? '<span class="tool-badge">在线工具</span>' : (fileButtons || '<span class="muted">—</span>')}
         </div>
       </td>
       <td data-label="上传信息">
-        <div>${escapeHtml(report.uploadedByName || '暂无')}</div>
+        <div>${escapeHtml(report.uploadedByName || '—')}</div>
         <div class="muted">${formatTime(report.uploadedAt)}</div>
       </td>
       <td data-label="最后下载">
-        <div>${escapeHtml(report.lastDownloadByName || '暂无')}</div>
+        <div>${escapeHtml(report.lastDownloadByName || '—')}</div>
         <div class="muted">${formatTime(report.lastDownloadAt)}</div>
       </td>
       <td data-label="备注">${escapeHtml(report.remarks || '')}</td>
@@ -772,8 +938,9 @@ function renderReportRow(report) {
           ${report.templateType === 'entrust' ? `<button class="mini fill-btn" data-action="fill" data-report-id="${report.id}" onclick="window.openEntrustFormDirect && window.openEntrustFormDirect(this.dataset.reportId)" type="button">填写</button>` : ''}
           <button class="mini" data-action="logs" data-report-id="${report.id}" type="button">记录</button>
           <button class="mini" data-action="versions" data-report-id="${report.id}" type="button">版本</button>
-          ${canManageTemplates() ? `<button class="mini" data-action="edit" data-report-id="${report.id}" type="button">编辑</button>` : ''}
-          ${canManageTemplates() ? `<button class="mini danger-btn" data-action="deactivate" data-report-id="${report.id}" type="button">停用</button>` : ''}
+          ${compactSystemActions
+            ? `<button class="mini row-more-trigger" data-action="more-report-actions" data-report-id="${report.id}" aria-label="更多操作" title="更多操作" type="button">⋯</button>`
+            : canManageTemplates() ? `<button class="mini" data-action="edit" data-report-id="${report.id}" type="button">编辑</button><button class="mini danger-btn" data-action="deactivate" data-report-id="${report.id}" type="button">停用</button>` : ''}
         </div>
       </td>
     </tr>
@@ -816,7 +983,7 @@ function renderInstrumentUsage() {
       <div class="instrument-actions"><button class="primary" data-action="match-instruments" type="button">匹配仪器</button><button class="mini" data-action="save-instruments" type="button">保存使用记录</button></div>
       <div id="instrumentMatches" class="instrument-matches"><div class="empty compact">输入试验参数后点击“匹配仪器”。</div></div>
     </section>
-    <section class="instrument-history"><h3>使用记录</h3>${records.length ? `<table class="report-table"><thead><tr><th>日期</th><th>样品编号</th><th>仪器</th><th>使用时间</th><th>使用人</th><th>状态</th></tr></thead><tbody>${records.map((r) => `<tr><td>${escapeHtml(r.usageDate)}</td><td>${escapeHtml(r.sampleNo)}</td><td>${escapeHtml(r.instrumentName)}<div class="muted">${escapeHtml(r.instrumentCode)}</div></td><td>${escapeHtml(r.startTime)}-${escapeHtml(r.endTime)}</td><td>${escapeHtml(r.userName)}</td><td>${escapeHtml(r.beforeStatus)} / ${escapeHtml(r.afterStatus)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">暂无使用记录</div>'}</section>
+    <section class="instrument-history"><h3>使用记录</h3>${records.length ? `<table class="report-table"><thead><tr><th>日期</th><th>样品编号</th><th>仪器</th><th>使用时间</th><th>使用人</th><th>状态</th></tr></thead><tbody>${records.map((r) => `<tr><td>${displayEmptyValue(r.usageDate)}</td><td>${displayEmptyValue(r.sampleNo)}</td><td>${displayEmptyValue(r.instrumentName)}<div class="muted">${displayEmptyValue(r.instrumentCode)}</div></td><td>${displayInstrumentTimeRange(r.startTime, r.endTime)}</td><td>${displayEmptyValue(r.userName)}</td><td>${displayEmptyValue(r.beforeStatus)} / ${displayEmptyValue(r.afterStatus)}</td></tr>`).join('')}</tbody></table>` : '<div class="empty">—</div>'}</section>
   `;
 }
 
@@ -1206,7 +1373,7 @@ function renderVideos() {
   if (filtered.length === 0) {
     els.reportList.innerHTML = `
       <div class="empty video-empty">
-        暂无检测视频。管理员请先把 mp4 视频放到 ${escapeHtml(state.videoDir || 'E:\\恒信通视频')}，再到管理后台登记。
+        当前没有检测视频。管理员请先把 mp4 视频放到 ${escapeHtml(state.videoDir || 'E:\\恒信通视频')}，再到管理后台登记。
       </div>
     `;
     return;
@@ -1220,11 +1387,11 @@ function renderVideos() {
 }
 
 function renderVideoRow(video, index) {
-  const teacher = video.lecturer || '暂无讲师';
-  const updated = formatTime(video.updatedAt || video.createdAt);
+  const teacher = video.lecturer || '—';
+  const updated = formatStandardTime(video.updatedAt || video.createdAt);
   const titleSequence = String(video.title || '').match(/^\d+/)?.[0];
   const displaySequence = titleSequence || String(index + 1).padStart(2, '0');
-  const detailParts = [`讲师：${teacher}`, updated ? `更新：${updated}` : '', video.remarks || ''].filter(Boolean);
+  const detailParts = [`讲师：${teacher}`, updated && updated !== '—' ? `更新：${updated}` : ''].filter(Boolean);
   return `
     <article class="video-course-row">
       <div class="video-course-index" aria-hidden="true">${escapeHtml(displaySequence)}</div>
@@ -1273,7 +1440,7 @@ async function handleReportListClick(event) {
   }
 
   if (action === 'auto-upload-pdf') {
-    els.reportList.querySelector('[data-auto-pdf-file]')?.click();
+    (els.reportList.querySelector('[data-auto-pdf-file]') || els.standardPageUploadInput)?.click();
     return;
   }
 
@@ -1291,6 +1458,11 @@ async function handleReportListClick(event) {
     openAdmin();
     setAdminTab('videos');
     fillVideoForm(videoId);
+    return;
+  }
+
+  if (action === 'more-report-actions') {
+    openRowActionMenu(button, reportId);
     return;
   }
 
@@ -1360,6 +1532,45 @@ async function handleReportListClick(event) {
   if (action === 'deactivate') {
     await updateReportActive(reportId, false);
   }
+}
+
+function openRowActionMenu(button, reportId) {
+  const menu = els.rowActionMenu;
+  menu.dataset.reportId = String(reportId);
+  menu.hidden = false;
+  const triggerRect = button.getBoundingClientRect();
+  const menuRect = menu.getBoundingClientRect();
+  let top = triggerRect.bottom + 6;
+  if (top + menuRect.height > window.innerHeight - 12) top = triggerRect.top - menuRect.height - 6;
+  const left = Math.max(12, Math.min(window.innerWidth - menuRect.width - 12, triggerRect.right - menuRect.width));
+  menu.style.top = `${Math.max(12, top)}px`;
+  menu.style.left = `${left}px`;
+}
+
+function closeRowActionMenu() {
+  els.rowActionMenu.hidden = true;
+  els.rowActionMenu.removeAttribute('data-report-id');
+}
+
+async function handleRowActionMenuClick(event) {
+  const button = event.target.closest('[data-row-menu-action]');
+  if (!button) return;
+  const reportId = Number(els.rowActionMenu.dataset.reportId);
+  const action = button.dataset.rowMenuAction;
+  closeRowActionMenu();
+  if (action === 'edit') {
+    openAdmin();
+    setAdminTab('upload');
+    els.reportSelect.value = String(reportId);
+    fillReportFormFromSelection();
+    return;
+  }
+  if (action === 'deactivate') await updateReportActive(reportId, false);
+}
+
+function handleGlobalMenuClose(event) {
+  if (!event.target.closest('#topMoreMenu')) els.topMoreMenu.removeAttribute('open');
+  if (!event.target.closest('#rowActionMenu') && !event.target.closest('[data-action="more-report-actions"]')) closeRowActionMenu();
 }
 
 async function handleFunanPaste() {
@@ -1488,11 +1699,11 @@ function renderEntrustControls() {
       </label>
       <label>
         地址
-        <input id="formAddress" value="/">
+        <input id="formAddress" value="—">
       </label>
       <label>
         邮编
-        <input id="formPostcode" value="/">
+        <input id="formPostcode" value="—">
       </label>
     </fieldset>
 
@@ -1710,8 +1921,8 @@ function parseQuickEntrustPaste() {
     const sample = {
       ...(matched || ENTRUST_SAMPLES[0]),
       name: sampleName || matched?.name || '样品',
-      spec: read('spec') || matched?.spec || '/',
-      model: read('spec') || matched?.model || '/',
+      spec: read('spec') || matched?.spec || '—',
+      model: read('spec') || matched?.model || '—',
       quantity,
       usage: read('usage') || matched?.usage || '路基'
     };
@@ -1867,7 +2078,7 @@ function renderEntrustLedger(records) {
   const list = document.getElementById('entrustLedgerList');
   if (!list) return;
   if (!records.length) {
-    list.innerHTML = '<div class="empty compact">暂无委托台账记录</div>';
+    list.innerHTML = '<div class="empty compact">—</div>';
     return;
   }
 
@@ -2050,8 +2261,8 @@ function getEntrustValues() {
     entrustNo,
     taskNo,
     project: readFormValue('formProject') || client.project,
-    address: readFormValue('formAddress') || '/',
-    postcode: readFormValue('formPostcode') || '/',
+    address: readFormValue('formAddress') || '—',
+    postcode: readFormValue('formPostcode') || '—',
     entrustDate: formatFormDate(readFormValue('formEntrustDate')),
     receiveDate: formatFormDate(readFormValue('formReceiveDate') || readFormValue('formEntrustDate')),
     finishDate: formatFormDate(readFormValue('formFinishDate')),
@@ -2216,7 +2427,7 @@ function renderEntrustSheet(data) {
             <th>来样数量/组数</th>
             <td colspan="3"><span class="editable-print sample-quantity-print" contenteditable="true">${escapeHtml(getTrialFieldSummary(data, 'quantity'))}</span></td>
             <th>备样组数</th>
-            <td>${editableText('/')}</td>
+            <td>${editableText('—')}</td>
           </tr>
           <tr>
             <th>样品产地</th>
@@ -2226,7 +2437,7 @@ function renderEntrustSheet(data) {
           </tr>
           <tr>
             <th>批号</th>
-            <td colspan="3">${editableText('/')}</td>
+            <td colspan="3">${editableText('—')}</td>
             <th>质保书</th>
             <td><span class="check" data-check-group="warranty"></span>有 <span class="check" data-check-group="warranty"></span>无 <span class="check" data-check-group="warranty"></span>后送</td>
           </tr>
@@ -2282,7 +2493,7 @@ function renderEntrustSheet(data) {
           </tr>
           <tr>
             <th>其它说明</th>
-            <td colspan="5">${editableText(data.remark || '/', true)}</td>
+            <td colspan="5">${editableText(data.remark || '—', true)}</td>
           </tr>
           <tr class="signature-row">
             <th>委托人（签字）</th>
@@ -2796,7 +3007,7 @@ function renderPreviewBody(report) {
   const availableFiles = [
     report.hasWord ? 'Word' : '',
     report.hasExcel ? 'Excel' : ''
-  ].filter(Boolean).join('、') || '暂无可查看文件';
+  ].filter(Boolean).join('、') || '—';
 
   return `
     <div class="preview-empty">
@@ -3109,7 +3320,7 @@ function renderCircledNumberDesigner() {
           </div>
 
           <div class="circle-color-grid">
-            ${colorControl('circleColor', '圆圈颜色', '#0f8a67')}
+            ${colorControl('circleColor', '圆圈颜色', '#16406B')}
             ${colorControl('circleTextColor', '数字颜色', '#ffffff')}
             ${colorControl('circleBorderColor', '外框颜色', '#d6a64c')}
           </div>
@@ -3511,7 +3722,7 @@ function getCircleConfig() {
     pointSize: readNumber('circlePointSize', 10, 70, 30),
     waveRange: readNumber('circleWaveRange', 0, 20, 5),
     borderPadding: readNumber('circleBorderPadding', 0, 60, 10),
-    circleColor: document.getElementById('circleColor')?.value || '#0f8a67',
+    circleColor: document.getElementById('circleColor')?.value || '#16406B',
     textColor: document.getElementById('circleTextColor')?.value || '#ffffff',
     borderColor: document.getElementById('circleBorderColor')?.value || '#d6a64c',
     borderStyle: document.querySelector('[data-circle-style].active')?.dataset.circleStyle || 'square'
@@ -4061,10 +4272,10 @@ async function showLogs(reportId) {
     const data = await api(`/api/reports/${reportId}/logs`);
     const uploadLines = data.uploads.length
       ? data.uploads.map((item) => `${formatTime(item.uploadedAt)}  ${item.uploadedByName || '未知'}  ${fileLabel(item.fileType)}  ${actionLabel(item.action)}  ${item.originalName}`).join('\n')
-      : '暂无上传记录';
+      : '—';
     const downloadLines = data.downloads.length
       ? data.downloads.map((item) => `${formatTime(item.downloadedAt)}  ${item.downloadedByName || '未知'}  ${fileLabel(item.fileType)}`).join('\n')
-      : '暂无下载记录';
+      : '—';
     alert(`上传记录：\n${uploadLines}\n\n下载记录：\n${downloadLines}`);
   } catch (error) {
     showError(error);
@@ -4093,7 +4304,7 @@ function closeVersions() {
 
 function renderVersions(reportId, versions) {
   if (!versions.length) {
-    els.versionBody.innerHTML = '<div class="empty compact">暂无历史版本</div>';
+    els.versionBody.innerHTML = '<div class="empty compact">—</div>';
     return;
   }
 
@@ -4189,7 +4400,7 @@ async function loadInactiveReports() {
 
 function renderInactiveReports(reports) {
   if (!reports.length) {
-    els.inactiveReportList.innerHTML = '<div class="empty compact">暂无已停用模板</div>';
+    els.inactiveReportList.innerHTML = '<div class="empty compact">—</div>';
     return;
   }
 
@@ -4469,7 +4680,7 @@ function renderVideoAdminList() {
     return;
   }
   if (!state.videos.length) {
-    els.videoAdminList.innerHTML = `<div class="empty compact">暂无检测视频。视频目录：${escapeHtml(state.videoDir || 'E:\\恒信通视频')}</div>`;
+    els.videoAdminList.innerHTML = `<div class="empty compact">当前没有检测视频。视频目录：${escapeHtml(state.videoDir || 'E:\\恒信通视频')}</div>`;
     return;
   }
 
@@ -4479,7 +4690,7 @@ function renderVideoAdminList() {
         <strong>${escapeHtml(video.title)}</strong>
         <div class="muted">${escapeHtml(video.category || '未分类')} / ${escapeHtml(video.fileName)}</div>
       </div>
-      <span class="muted">${escapeHtml(video.lecturer || '暂无来源')}</span>
+      <span class="muted">${escapeHtml(video.lecturer || '—')}</span>
       <button class="mini" data-action="edit-video-admin" type="button">编辑</button>
       <button class="mini danger-btn" data-action="disable-video" type="button">停用</button>
     </div>
@@ -4620,7 +4831,7 @@ async function showOperationLogs() {
     const data = await api('/api/operation-logs');
     const lines = data.logs.length
       ? data.logs.map((item) => `${formatTime(item.createdAt)}  ${item.userName || '未知'}  ${item.action}  ${item.targetName || ''}${item.detail ? `  ${item.detail}` : ''}`)
-      : ['暂无操作日志'];
+      : ['—'];
     alert(`最近操作日志：\n${lines.join('\n')}`);
   } catch (error) {
     showError(error);
@@ -4642,7 +4853,7 @@ async function loadBackups() {
 
 function renderBackups(backups) {
   if (!backups.length) {
-    els.backupList.innerHTML = '<div class="empty compact">暂无可恢复备份</div>';
+    els.backupList.innerHTML = '<div class="empty compact">—</div>';
     return;
   }
 
@@ -4714,9 +4925,9 @@ async function api(url, options = {}) {
 }
 
 function formatTime(value) {
-  if (!value) return '暂无';
+  if (!value) return '—';
   const date = new Date(value);
-  if (Number.isNaN(date.getTime())) return '暂无';
+  if (Number.isNaN(date.getTime())) return '—';
   return date.toLocaleString('zh-CN', { hour12: false });
 }
 
@@ -4789,6 +5000,22 @@ function notice(text) {
 
 function showError(error) {
   alert(error.message || '操作失败');
+}
+
+function normalizeEmptyText(value) {
+  const text = String(value ?? '').trim();
+  return !text || text === '-' ? '—' : text;
+}
+
+function displayEmptyValue(value) {
+  return escapeHtml(normalizeEmptyText(value));
+}
+
+function displayInstrumentTimeRange(startTime, endTime) {
+  const start = normalizeEmptyText(startTime);
+  const end = normalizeEmptyText(endTime);
+  if (start === '—' && end === '—') return '—';
+  return `${escapeHtml(start)} 至 ${escapeHtml(end)}`;
 }
 
 function escapeHtml(value) {

@@ -170,7 +170,7 @@
                             <div class="secondary-text">上传后可拖拽调整顺序</div>
                             <input type="file" id="merge-file-input" accept=".pdf" multiple>
                         </div>
-                        <div id="merge-file-list" class="file-list"><div class="empty-message">暂无文件，请上传</div></div>
+                        <div id="merge-file-list" class="file-list"><div class="empty-message">—</div></div>
                         <button class="btn btn-sm" id="clear-merge-btn">清空列表</button>
                     </div>
                     <div class="split-right">
@@ -428,7 +428,7 @@
                   btnMerge=$('#merge-btn'), clearBtn=$('#clear-merge-btn'), status=$('#merge-status'),
                   progress=$('#merge-progress'), bar=progress.querySelector('.progress-bar');
             function render() {
-                if (!state.files.length) { list.innerHTML = '<div class="empty-message">暂无文件，请上传</div>'; btnMerge.disabled = true; return; }
+                if (!state.files.length) { list.innerHTML = '<div class="empty-message">—</div>'; btnMerge.disabled = true; return; }
                 list.innerHTML = state.files.map(f => `
                     <div class="file-item" draggable="true" data-id="${f.id}">
                         <span class="drag-handle">☰</span><div class="file-info"><span class="file-name">${f.name}</span><span class="file-pages">${f.pages}页</span></div>
