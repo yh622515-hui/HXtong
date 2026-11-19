@@ -322,6 +322,10 @@ function bindEvents() {
   els.resetVideoFormBtn.addEventListener('click', resetVideoForm);
   els.videoAdminList.addEventListener('click', handleVideoAdminClick);
   els.userForm.addEventListener('submit', handleUserSubmit);
+  document.getElementById('newUserScope').innerHTML = scopeOptions();
+  els.userForm.addEventListener('change', handleScopeChange);
+  els.userList.addEventListener('change', handleScopeChange);
+  els.userForm.addEventListener('reset', () => queueMicrotask(() => syncScopePicker(els.userForm)));
   els.categoryList.addEventListener('click', handleCategoryListClick);
   els.categoryList.addEventListener('change', handleCategoryListChange);
   els.userList.addEventListener('click', handleUserListClick);
@@ -450,8 +454,10 @@ function cleanLoginIfVisible() {
 
 function showApp() {
   document.body.dataset.role = state.user.role;
-  if (state.user.scope && state.user.scope !== 'all' && state.user.role === 'user') {
-    state.selectedTemplateType = normalizeTemplateType(state.user.scope);
+  const allowed = state.user.scope === 'all' ? TEMPLATE_TYPES.map(({ id }) => id) : state.user.scope.split(',');
+  if (!allowed.includes(state.selectedTemplateType)) {
+    state.selectedTemplateType = TEMPLATE_TYPES.find(({ id }) => allowed.includes(id))?.id || 'entrust';
+    state.selectedCategoryId = null;
     state.expandedTemplateTypes = new Set([state.selectedTemplateType]);
   }
   els.currentUser.textContent = `${state.user.displayName}（${roleLabel(state.user.role)}）`;
@@ -4605,18 +4611,35 @@ function templateOptions(selectedType) {
 }
 
 function scopeOptions(selectedScope = 'all') {
-  const scopes = [
-    { id: 'all', label: '可看全部' },
-    { id: 'entrust', label: '只看委托单/任务单' },
-    { id: 'report', label: '只看检测报告' },
-    { id: 'auxiliary', label: '只看辅助检测' },
-    { id: 'system', label: '只看管理体系' },
-    { id: 'video', label: '只看检测视频' },
-    { id: 'project', label: '只看阜南南阳大道' }
-  ];
-  return scopes
-    .map((scope) => `<option value="${scope.id}" ${scope.id === (selectedScope || 'all') ? 'selected' : ''}>${escapeHtml(scope.label)}</option>`)
-    .join('');
+  const selected = selectedScope.split(',').filter(Boolean);
+  const scopes = [{ id: 'all', label: '可看全部' }, ...TEMPLATE_TYPES];
+  return `<details class="scope-picker"><summary>访问范围：<span>${scopeSummary(selected)}</span></summary>
+    <div class="scope-options">${scopes.map(({ id, label }) => `<label><input type="checkbox" name="scope" value="${id}" ${selected.includes(id) ? 'checked' : ''}>${escapeHtml(label)}</label>`).join('')}</div></details>`;
+}
+
+function scopeSummary(scopes) {
+  return scopes.includes('all') ? '全部' : scopes.length ? `已选 ${scopes.length} 项` : '未选择';
+}
+
+function selectedScopes(container) {
+  return [...container.querySelectorAll('.scope-picker input:checked')].map((input) => input.value);
+}
+
+function syncScopePicker(container) {
+  const picker = container.querySelector('.scope-picker');
+  picker.querySelector('summary span').textContent = scopeSummary(selectedScopes(picker));
+}
+
+function handleScopeChange(event) {
+  const picker = event.target.closest('.scope-picker');
+  if (!picker || !event.target.checked) {
+    if (picker) picker.querySelector('summary span').textContent = scopeSummary(selectedScopes(picker));
+    return;
+  }
+  for (const input of picker.querySelectorAll('input:checked')) {
+    if (input !== event.target && (input.value === 'all' || event.target.value === 'all')) input.checked = false;
+  }
+  picker.querySelector('summary span').textContent = scopeSummary(selectedScopes(picker));
 }
 
 async function handleVideoSubmit(event) {
@@ -4741,9 +4764,7 @@ function renderUsers(users) {
         <option value="admin" ${user.role === 'admin' ? 'selected' : ''}>管理员</option>
         <option value="superadmin" ${user.role === 'superadmin' ? 'selected' : ''}>超级管理员</option>
       </select>
-      <select data-field="scope">
-        ${scopeOptions(user.scope)}
-      </select>
+      ${scopeOptions(user.scope)}
       <label>
         <span>启用</span>
         <input data-field="active" type="checkbox" ${user.active ? 'checked' : ''}>
@@ -4765,7 +4786,7 @@ async function handleUserSubmit(event) {
         displayName: formData.get('displayName'),
         password: formData.get('password'),
         role: formData.get('role'),
-        scope: formData.get('scope')
+        scope: formData.get('role') === 'superadmin' ? ['all'] : selectedScopes(els.userForm)
       }
     });
     els.userForm.reset();
@@ -4785,7 +4806,7 @@ async function handleUserListClick(event) {
     username: row.querySelector('[data-field="username"]').value,
     displayName: row.querySelector('[data-field="displayName"]').value,
     role: row.querySelector('[data-field="role"]').value,
-    scope: row.querySelector('[data-field="scope"]').value,
+    scope: row.querySelector('[data-field="role"]').value === 'superadmin' ? ['all'] : selectedScopes(row),
     active: row.querySelector('[data-field="active"]').checked,
     password: row.querySelector('[data-field="password"]').value
   };
@@ -4982,7 +5003,7 @@ function templateLabel(templateType) {
 }
 
 function canManageTemplates() {
-  return state.user && (state.user.role === 'admin' || state.user.role === 'superadmin');
+  return state.user && (state.user.role === 'superadmin' || (state.user.role === 'admin' && state.user.scope === 'all'));
 }
 
 function canManageUsers() {

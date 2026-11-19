@@ -4220,6 +4220,12 @@ body:not([data-role="superadmin"]) .super-only {
   grid-template-columns: 120px minmax(110px, 1fr) 110px minmax(150px, 190px) 80px minmax(120px, 170px) auto;
 }
 
+.scope-picker { min-width: 0; align-self: start; }
+.scope-picker summary { cursor: pointer; padding: 8px 4px; }
+.scope-options { display: grid; gap: 8px; padding: 8px 4px; }
+.scope-picker .scope-options label { display: flex; align-items: center; gap: 6px; }
+.scope-picker .scope-options input { width: auto; height: auto; margin: 0; flex: none; }
+
 .manage-row.inactive-report-row {
   grid-template-columns: minmax(180px, 1fr) 100px auto;
 }

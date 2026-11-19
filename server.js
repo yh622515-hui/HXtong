@@ -657,6 +657,10 @@ async function handleRequest(req, res) {
     return;
   }
 
+  if (/^\/tools(?:\/|$)/i.test(path.posix.normalize(pathname.replace(/\\/g, '/')))) {
+    const user = requireUser(req, res);
+    if (!user || !requireTemplateScope(user, res, 'tool')) return;
+  }
   serveStaticFile(res, pathname);
 }
 
@@ -706,6 +710,15 @@ async function handleApi(req, res, requestUrl) {
 
   const user = requireUser(req, res);
   if (!user) return;
+
+  const scopedRoutes = [
+    [/^\/api\/(?:standard-library|standard-check)(?:\/|$)/, 'system'],
+    [/^\/api\/funan-project(?:\/|$)/, 'project'],
+    [/^\/api\/instrument-usage(?:\/|$)/, 'instrument'],
+    [/^\/api\/(?:export\/entrust-records|entrust-records|sample-origins)(?:\/|$)/, 'entrust']
+  ];
+  const scopedRoute = scopedRoutes.find(([pattern]) => pattern.test(pathname));
+  if (scopedRoute && !requireTemplateScope(user, res, scopedRoute[1])) return;
 
   if (req.method === 'GET' && pathname === '/api/me') {
     sendJson(res, 200, { user: publicUser(user) });
@@ -1110,11 +1123,17 @@ function requireUser(req, res) {
 }
 
 function requireAdmin(user, res) {
-  if (!isAdminRole(user.role)) {
+  if (!(user.role === 'superadmin' || (user.role === 'admin' && user.scope === 'all'))) {
     sendJson(res, 403, { message: '只有管理员或超级管理员可以操作' });
     return null;
   }
   return user;
+}
+
+function requireTemplateScope(user, res, type) {
+  if (canSeeTemplateType(user, type)) return true;
+  sendJson(res, 403, { message: '没有该栏目的访问权限' });
+  return false;
 }
 
 function requireSuperAdmin(user, res) {
@@ -2808,7 +2827,7 @@ function createUserFromBody(body, operator) {
   const displayName = cleanText(body.displayName) || username;
   const password = String(body.password || '');
   const role = normalizeUserRole(body.role);
-  const scope = normalizeUserScope(body.scope);
+  const scope = validateUserScope(body.scope === undefined ? 'all' : body.scope);
 
   validateUsername(username);
   if (password.length < 6) throw publicError(400, '密码至少 6 位');
@@ -2831,7 +2850,7 @@ function updateUser(id, body, currentSuperAdmin) {
   const username = String(body.username || existing.username).trim();
   const displayName = cleanText(body.displayName) || existing.display_name;
   const role = normalizeUserRole(body.role || existing.role);
-  const scope = normalizeUserScope(body.scope || existing.scope);
+  const scope = body.scope === undefined ? existing.scope : validateUserScope(body.scope);
   const active = body.active === false || body.active === 0 || body.active === '0' ? 0 : 1;
   validateUsername(username);
 
@@ -3304,7 +3323,7 @@ function publicUser(user) {
     username: user.username,
     displayName: user.display_name,
     role: user.role,
-    scope: normalizeUserScope(user.scope),
+    scope: user.role === 'superadmin' ? 'all' : normalizeUserScope(user.scope),
     active: Boolean(user.active),
     createdAt: user.created_at,
     updatedAt: user.updated_at
@@ -3329,19 +3348,23 @@ function normalizeUserRole(value) {
 }
 
 function normalizeUserScope(value) {
-  const scope = String(value || 'all').trim();
-  return USER_SCOPES.has(scope) ? scope : 'all';
+  const scopes = Array.isArray(value) ? value : typeof value === 'string' ? value.split(',') : [];
+  if (!scopes.length || scopes.some((scope) => !USER_SCOPES.has(scope))) return '';
+  const unique = [...new Set(scopes)];
+  return unique.includes('all') && unique.length !== 1 ? '' : unique.join(',');
 }
 
-function isAdminRole(role) {
-  return role === 'admin' || role === 'superadmin';
+function validateUserScope(value) {
+  const scope = normalizeUserScope(value);
+  if (!scope) throw publicError(400, '请选择可看全部，或至少选择一个访问栏目');
+  return scope;
 }
 
 function visibleTemplateTypes(user) {
   const allTypes = ['entrust', 'report', 'auxiliary', 'system', 'video', 'project', 'instrument', 'tool'];
-  if (!user || isAdminRole(user.role)) return allTypes;
+  if (!user || user.role === 'superadmin') return allTypes;
   const scope = normalizeUserScope(user.scope);
-  return scope === 'all' ? allTypes : [scope];
+  return scope === 'all' ? allTypes : scope.split(',').filter(Boolean);
 }
 
 function canSeeTemplateType(user, templateType) {

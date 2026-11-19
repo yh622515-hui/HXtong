@@ -5,7 +5,7 @@
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>恒信通</title>
   <link rel="icon" type="image/svg+xml" href="/favicon.svg?v=20261110-global-theme-v1">
-  <link rel="stylesheet" href="/styles.css?v=20261110-login-redesign-v2">
+  <link rel="stylesheet" href="/styles.css?v=scope-multi-v1">
 </head>
 <body>
   <div id="loginView" class="login-page">
@@ -394,14 +394,7 @@
               <option value="admin">管理员</option>
               <option value="superadmin">超级管理员</option>
             </select>
-            <select name="scope">
-              <option value="all">可看全部</option>
-              <option value="entrust">只看委托单/任务单</option>
-              <option value="report">只看检测报告</option>
-              <option value="auxiliary">只看辅助检测</option>
-              <option value="system">只看管理体系</option>
-              <option value="video">只看检测视频</option>
-            </select>
+            <div id="newUserScope"></div>
             <button class="primary" type="submit">新增用户</button>
           </form>
           <div id="userList" class="manage-list"></div>
@@ -437,6 +430,6 @@
     <button data-row-menu-action="edit" type="button">编辑</button>
     <button data-row-menu-action="deactivate" class="danger-btn" type="button">停用</button>
   </div>
-  <script src="/app.js?v=20261110-tree-dblclick-v1"></script>
+  <script src="/app.js?v=scope-multi-v1"></script>
 </body>
 </html>
